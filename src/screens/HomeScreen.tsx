@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -8,30 +8,19 @@ import {
   Image, 
   ScrollView,
   FlatList,
-  ActivityIndicator,
-  Alert,
-  TextInput,
-  Modal
+  Alert
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS, FONTS, SIZES } from '../styles/theme';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import CustomMapView from '../components/MapView';
+import MapsService from '../services/mapsService';
 
 // Mock data for recent rides
 const recentRides = [
   { id: '1', location: 'Home', address: '123 Main Street', icon: 'home-outline', coordinates: {latitude: 23.8103, longitude: 90.4125} },
   { id: '2', location: 'Work', address: '456 Office Park', icon: 'briefcase-outline', coordinates: {latitude: 23.8203, longitude: 90.4225} },
   { id: '3', location: 'Shopping Mall', address: '789 Market Street', icon: 'cart-outline', coordinates: {latitude: 23.8150, longitude: 90.4050} },
-];
-
-// Mock location suggestions for search
-const locationSuggestions = [
-  { id: '1', name: 'Airport', address: 'International Airport', coordinates: {latitude: 23.8423, longitude: 90.4027} },
-  { id: '2', name: 'Central Park', address: 'City Center', coordinates: {latitude: 23.8103, longitude: 90.4325} },
-  { id: '3', name: 'University', address: 'University Campus', coordinates: {latitude: 23.7903, longitude: 90.4125} },
-  { id: '4', name: 'Hospital', address: 'General Hospital', coordinates: {latitude: 23.8203, longitude: 90.3925} },
-  { id: '5', name: 'Train Station', address: 'Central Station', coordinates: {latitude: 23.8003, longitude: 90.4225} },
 ];
 
 // Mock data for suggested rides
@@ -43,12 +32,13 @@ const suggestedRides = [
 
 const HomeScreen = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const [isLoading, setIsLoading] = useState(false);
   const [currentLocation, setCurrentLocation] = useState('Current Location');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showSearchModal, setShowSearchModal] = useState(false);
-  const [filteredLocations, setFilteredLocations] = useState(locationSuggestions);
-  const [editingMarker, setEditingMarker] = useState<'source' | 'destination' | null>(null);
+  
+  // Route-related state
+  const [routeCoordinates, setRouteCoordinates] = useState<Array<{latitude: number; longitude: number}>>([]);
+  const [routeInfo, setRouteInfo] = useState<{distance: string; duration: string} | null>(null);
 
   // Source and destination location state variables - using default values
   const [sourceLocation, setSourceLocation] = useState({
@@ -61,21 +51,54 @@ const HomeScreen = () => {
     longitude: number;
   } | null>(null);
 
-  const searchInputRef = useRef<TextInput>(null);
-
-  // Filter locations based on search query
-  React.useEffect(() => {
-    if (searchQuery.trim().length > 0) {
-      const filtered = locationSuggestions.filter(
-        location => 
-          location.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          location.address.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredLocations(filtered);
-    } else {
-      setFilteredLocations(locationSuggestions);
+  // Handle location selected from the LocationSearchScreen
+  useEffect(() => {
+    if (route.params?.selectedLocation && route.params?.locationType) {
+      const { selectedLocation, locationType } = route.params;
+      
+      if (locationType === 'source') {
+        setSourceLocation(selectedLocation.coordinates);
+        setCurrentLocation(selectedLocation.name);
+      } else if (locationType === 'destination') {
+        setDestinationLocation(selectedLocation.coordinates);
+      }
+      
+      // Clear the params to avoid re-processing
+      navigation.setParams({ selectedLocation: undefined, locationType: undefined });
     }
-  }, [searchQuery]);
+  }, [route.params?.selectedLocation]);
+  
+  // Get route when source or destination changes
+  useEffect(() => {
+    if (sourceLocation && destinationLocation) {
+      fetchRoute(sourceLocation, destinationLocation);
+    } else {
+      // Clear route if source or destination is missing
+      setRouteCoordinates([]);
+      setRouteInfo(null);
+    }
+  }, [sourceLocation, destinationLocation]);
+
+  // Function to fetch route between two points
+  const fetchRoute = async (
+    source: { latitude: number; longitude: number },
+    dest: { latitude: number; longitude: number }
+  ) => {
+    setIsLoading(true);
+    try {
+      const routeData = await MapsService.getDirections(source, dest);
+      setRouteCoordinates(routeData.coordinates);
+      setRouteInfo({
+        distance: routeData.distance,
+        duration: routeData.duration
+      });
+    } catch (error) {
+      console.error('Error fetching route:', error);
+      Alert.alert('Route Error', 'Unable to fetch directions. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSourceLocationChange = (location: {
     latitude: number;
@@ -113,8 +136,12 @@ const HomeScreen = () => {
           {
             text: 'Search for Location',
             onPress: () => {
-              setEditingMarker('source');
-              setShowSearchModal(true);
+              // Navigate to LocationSearchScreen for source location
+              navigation.navigate('LocationSearchScreen', {
+                currentLocation: sourceLocation,
+                locationType: 'source',
+                returnScreen: 'Home'
+              });
             }
           },
           { text: 'Cancel', style: 'cancel' }
@@ -128,8 +155,12 @@ const HomeScreen = () => {
           {
             text: 'Search for Location',
             onPress: () => {
-              setEditingMarker('destination');
-              setShowSearchModal(true);
+              // Navigate to LocationSearchScreen for destination
+              navigation.navigate('LocationSearchScreen', {
+                currentLocation: sourceLocation,
+                locationType: 'destination',
+                returnScreen: 'Home'
+              });
             }
           },
           { text: 'Cancel', style: 'cancel' }
@@ -139,19 +170,15 @@ const HomeScreen = () => {
   };
 
   const handleLocationSelect = (item: any) => {
-    if (editingMarker === 'source') {
-      setSourceLocation(item.coordinates);
-      setCurrentLocation(item.name);
-    } else {
-      setDestinationLocation(item.coordinates);
-    }
-    setShowSearchModal(false);
-    setSearchQuery('');
-    setEditingMarker(null);
+    setDestinationLocation(item.coordinates);
   };
 
   const handleRecentLocationSelect = (item: any) => {
-    setDestinationLocation(item.coordinates);
+    if (item.coordinates) {
+      setDestinationLocation(item.coordinates);
+      // If we have source location, the route will be automatically fetched
+      // via the useEffect that watches for changes to source and destination
+    }
   };
 
   const handleBookRide = () => {
@@ -178,11 +205,12 @@ const HomeScreen = () => {
   };
 
   const handleOpenSearch = () => {
-    setShowSearchModal(true);
-    setEditingMarker('destination');
-    setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 100);
+    // Navigate to LocationSearchScreen instead of showing modal
+    navigation.navigate('LocationSearchScreen', {
+      currentLocation: sourceLocation,
+      locationType: 'destination',
+      returnScreen: 'Home'
+    });
   };
 
   return (
@@ -193,10 +221,12 @@ const HomeScreen = () => {
           <CustomMapView
             currentLocation={sourceLocation}
             destination={destinationLocation}
+            routeCoordinates={routeCoordinates} 
             style={styles.mapView}
             onSourceLocationChange={handleSourceLocationChange}
             onDestinationLocationChange={handleDestinationLocationChange}
             onCustomMarkerPress={handleMarkerPress}
+            isLoading={isLoading}
           />
           <Text style={styles.simulationNotice}>
             Simulated Map View (Intentional)
@@ -217,6 +247,19 @@ const HomeScreen = () => {
               <Ionicons name="locate" size={24} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
+          
+          {/* Route info overlay */}
+          {routeInfo && destinationLocation && (
+            <View style={styles.routeInfoOverlay}>
+              <View style={styles.routeInfoContainer}>
+                <Text style={styles.routeInfoText}>
+                  <Ionicons name="time-outline" size={16} color={COLORS.black} /> {routeInfo.duration}
+                  {' • '}
+                  <Ionicons name="navigate-outline" size={16} color={COLORS.black} /> {routeInfo.distance}
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Add profile button to the map overlay */}
@@ -321,72 +364,6 @@ const HomeScreen = () => {
           <Ionicons name="chevron-forward" size={16} color={COLORS.text} />
         </TouchableOpacity>
       </ScrollView>
-
-      {/* Search Location Modal */}
-      <Modal
-        visible={showSearchModal}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowSearchModal(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.searchHeader}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={() => {
-                setShowSearchModal(false);
-                setSearchQuery('');
-              }}
-            >
-              <Ionicons name="arrow-back" size={24} color={COLORS.black} />
-            </TouchableOpacity>
-            
-            <TextInput
-              ref={searchInputRef}
-              style={styles.searchInput}
-              placeholder={editingMarker === 'source' ? "Search for pickup location" : "Search for destination"}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoFocus
-            />
-          </View>
-
-          <FlatList
-            data={filteredLocations}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity 
-                style={styles.searchResultItem}
-                onPress={() => handleLocationSelect(item)}
-              >
-                <View style={styles.searchLocationIcon}>
-                  <Ionicons 
-                    name={editingMarker === 'source' ? "location-outline" : "flag-outline"} 
-                    size={20} 
-                    color={editingMarker === 'source' ? "#4285F4" : "#EA4335"} 
-                  />
-                </View>
-                <View>
-                  <Text style={styles.searchLocationName}>{item.name}</Text>
-                  <Text style={styles.searchLocationAddress}>{item.address}</Text>
-                </View>
-              </TouchableOpacity>
-            )}
-            ListEmptyComponent={
-              isLoading ? (
-                <View style={styles.loadingSearchResults}>
-                  <ActivityIndicator size="large" color={COLORS.primary} />
-                  <Text style={styles.loadingText}>Searching locations...</Text>
-                </View>
-              ) : (
-                <View style={styles.emptySearchResults}>
-                  <Text style={styles.emptySearchText}>No locations found</Text>
-                </View>
-              )
-            }
-          />
-        </SafeAreaView>
-      </Modal>
     </SafeAreaView>
   );
 };
@@ -433,6 +410,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 4,
+  },
+  routeInfoOverlay: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    right: 10,
+    alignItems: 'center',
+  },
+  routeInfoContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  routeInfoText: {
+    color: COLORS.black,
+    fontSize: 12,
+    fontWeight: '600',
   },
   card: {
     backgroundColor: COLORS.white,
@@ -609,74 +609,6 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     backgroundColor: COLORS.inactive || '#CCCCCC',
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  searchHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: SIZES.padding,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  searchInput: {
-    flex: 1,
-    height: 40,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    fontSize: 16,
-  },
-  searchResultItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: SIZES.padding,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  searchLocationIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.accent,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  searchLocationName: {
-    ...FONTS.body3,
-    color: COLORS.text,
-    fontWeight: '500',
-  },
-  searchLocationAddress: {
-    ...FONTS.body4,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  loadingSearchResults: {
-    padding: SIZES.padding * 2,
-    alignItems: 'center',
-  },
-  loadingText: {
-    ...FONTS.body3,
-    color: COLORS.textSecondary,
-  },
-  emptySearchResults: {
-    padding: SIZES.padding * 2,
-    alignItems: 'center',
-  },
-  emptySearchText: {
-    ...FONTS.body3,
-    color: COLORS.textSecondary,
   },
   simulationNotice: {
     position: 'absolute',

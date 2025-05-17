@@ -72,7 +72,7 @@ const HomeStackNavigator = () => (
       options={getCommonHeaderOptions('IShare')}
     />
     <HomeStack.Screen 
-      name="LocationSearch" 
+      name="LocationSearchScreen" 
       component={LocationSearchScreen} 
       options={getCommonHeaderOptions('Search Location')}
     />

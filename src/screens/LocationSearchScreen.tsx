@@ -9,23 +9,12 @@ import {
   SafeAreaView,
   ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { COLORS, FONTS, SIZES, SHADOWS } from '../styles/theme';
+import MapsService from '../services/mapsService';
 
-// Mock location data
-const mockLocations = [
-  { id: '1', name: 'Central Mall', address: '123 Shopping Ave, Anytown', isSaved: false },
-  { id: '2', name: 'Downtown Park', address: '456 Nature St, Anytown', isSaved: false },
-  { id: '3', name: 'City Hospital', address: '789 Health Blvd, Anytown', isSaved: false },
-  { id: '4', name: 'Grand Hotel', address: '101 Luxury Ln, Anytown', isSaved: false },
-  { id: '5', name: 'Train Station', address: '202 Transit Rd, Anytown', isSaved: false },
-  { id: '6', name: 'University Campus', address: '303 Education Dr, Anytown', isSaved: false },
-  { id: '7', name: 'Sport Stadium', address: '404 Game St, Anytown', isSaved: false },
-  { id: '8', name: 'Conference Center', address: '505 Meeting Blvd, Anytown', isSaved: false },
-];
-
-// Mock saved locations
+// Mock saved locations - keep these as they could represent user's saved places
 const mockSavedLocations = [
   { id: 'home', name: 'Home', address: '123 Home St, Anytown', isSaved: true },
   { id: 'work', name: 'Work', address: '456 Office Blvd, Anytown', isSaved: true },
@@ -35,9 +24,14 @@ const mockSavedLocations = [
 
 const LocationSearchScreen = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  
+  // Get the current location and location type from route params
+  const currentLocation = route.params?.currentLocation || { latitude: 23.8103, longitude: 90.4125 };
+  const locationType = route.params?.locationType || 'destination';
 
   useEffect(() => {
     if (searchQuery.trim() === '') {
@@ -45,25 +39,43 @@ const LocationSearchScreen = () => {
       return;
     }
 
+    // Only search if query is at least 2 characters
+    if (searchQuery.trim().length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
     setIsSearching(true);
 
-    // Simulate API call delay
-    const timeoutId = setTimeout(() => {
-      const filteredResults = mockLocations.filter(
-        location => 
-          location.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          location.address.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setSearchResults(filteredResults);
-      setIsSearching(false);
+    // Set up debounce to avoid too many API calls
+    const debounceTimer = setTimeout(async () => {
+      try {
+        // Use the Maps Service to get locations
+        const results = await MapsService.searchPlaces(searchQuery, currentLocation);
+        setSearchResults(results);
+      } catch (error) {
+        console.error('Error searching places:', error);
+        // Keep the UI functional even if the API fails
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
     }, 500);
 
-    return () => clearTimeout(timeoutId);
+    return () => clearTimeout(debounceTimer);
   }, [searchQuery]);
 
   const handleLocationSelect = (location: any) => {
-    // In a real app, would set selected location in redux
-    navigation.goBack();
+    // Return the selected location to the previous screen
+    navigation.navigate({
+      name: route.params?.returnScreen || 'Home',
+      params: {
+        selectedLocation: location,
+        locationType: locationType,
+      },
+      merge: true,
+    });
   };
 
   const renderLocationItem = ({ item }: { item: any }) => (
@@ -92,7 +104,17 @@ const LocationSearchScreen = () => {
         <TouchableOpacity
           key={location.id}
           style={styles.locationItem}
-          onPress={() => handleLocationSelect(location)}
+          onPress={() => handleLocationSelect({
+            id: location.id,
+            name: location.name,
+            address: location.address,
+            coordinates: {
+              // You would typically have real coordinates for saved locations
+              // These are placeholder values
+              latitude: 23.8103 + parseFloat(`0.0${location.id.charCodeAt(0) % 10}`),
+              longitude: 90.4125 + parseFloat(`0.0${location.id.charCodeAt(0) % 10}`)
+            }
+          })}
         >
           <View style={[styles.locationIconContainer, styles.savedIconContainer]}>
             <Ionicons 
@@ -116,7 +138,7 @@ const LocationSearchScreen = () => {
         <Ionicons name="search" size={20} color={COLORS.textSecondary} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Where to?"
+          placeholder={locationType === 'source' ? "Search pickup location" : "Where to?"}
           placeholderTextColor={COLORS.textSecondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -141,7 +163,11 @@ const LocationSearchScreen = () => {
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No results found</Text>
+              {searchQuery.trim().length < 2 ? (
+                <Text style={styles.emptyText}>Type at least 2 characters to search</Text>
+              ) : (
+                <Text style={styles.emptyText}>No results found. Try a different search.</Text>
+              )}
             </View>
           }
         />
