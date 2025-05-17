@@ -268,115 +268,15 @@ const CustomMapView: React.FC<CustomMapViewProps> = ({
         onRegionChange={onRegionChange}
         onPress={onMapPress}
       >
-        {/* Current location marker */}
-        {currentLocation && (
-          <Marker
-            coordinate={currentLocation}
-            title="Your Location"
-            description="You are here"
-            onPress={() => handleMarkerPress('source')}
-          >
-            <View style={styles.currentLocationMarkerContainer}>
-              <View style={styles.currentLocationMarker}>
-                <Ionicons name="location" size={20} color={COLORS.primary} />
-              </View>
-            </View>
-          </Marker>
-        )}
-
-        {/* Destination marker */}
-        {destination && (
-          <Marker
-            coordinate={destination}
-            title="Destination"
-            description="Your destination"
-            onPress={() => handleMarkerPress('destination')}
-          >
-            <View style={styles.destinationMarkerContainer}>
-              <View style={styles.destinationMarker}>
-                <Ionicons name="flag" size={20} color={COLORS.secondary} />
-              </View>
-            </View>
-          </Marker>
-        )}
-
-        {/* Pickup marker (if different from current location) */}
-        {pickup && (
-          <Marker
-            coordinate={pickup}
-            title="Pickup"
-            description="Pickup location"
-          >
-            <View style={styles.pickupMarkerContainer}>
-              <View style={styles.pickupMarker}>
-                <Ionicons name="locate" size={20} color={COLORS.primary} />
-              </View>
-            </View>
-          </Marker>
-        )}
-
-        {/* Nearby drivers */}
-        {nearbyDrivers.map((driver) => (
-          <Marker
-            key={driver.id}
-            coordinate={driver.location}
-            title="Driver"
-            description={`Driver ID: ${driver.id}`}
-          >
-            <View style={[
-              styles.driverMarkerContainer,
-              selectedDriver === driver.id && styles.selectedDriverMarkerContainer
-            ]}>
-              <Ionicons 
-                name="car" 
-                size={20} 
-                color={selectedDriver === driver.id ? COLORS.white : COLORS.primary} 
-              />
-            </View>
-          </Marker>
-        ))}
-
-        {/* High demand areas */}
-        {showDemandHeatmap && highDemandAreas.map((area) => (
-          <Circle
-            key={area.id}
-            center={area.coordinates}
-            radius={area.radius * 1000} // Convert km to meters
-            fillColor={`rgba(255, 0, 0, ${area.demandLevel * 0.2})`}
-            strokeColor="rgba(255, 0, 0, 0.5)"
-            strokeWidth={1}
-          />
-        ))}
-
-        {/* Route polyline */}
-        {routeCoordinates.length > 0 && (
-          <Polyline
-            coordinates={routeCoordinates}
-            strokeWidth={4}
-            strokeColor={COLORS.primary}
-            lineDashPattern={[0]}
-          />
-        )}
+        <Marker coordinate={{ latitude: 23.7103, longitude: 90.4125 }} 
+          title="Current Location"
+          pinColor={COLORS.primary}
+        />
+        <Marker coordinate={{ latitude: 23.6103, longitude: 90.4125 }} 
+          title="Current Location"
+          pinColor={COLORS.secondary}
+        />
       </MapView>
-
-      {/* Show distance and time if route is available */}
-      {routeInfo && (
-        <View style={styles.routeInfoContainer}>
-          <Text style={styles.routeInfoText}>
-            <Ionicons name="time-outline" size={16} color={COLORS.black} /> {routeInfo.duration}
-            {' • '}
-            <Ionicons name="navigate-outline" size={16} color={COLORS.black} /> {routeInfo.distance}
-          </Text>
-        </View>
-      )}
-
-      {/* My location button */}
-      <TouchableOpacity
-        style={styles.myLocationButton}
-        onPress={centerOnUserLocation}
-      >
-        <Ionicons name="locate" size={22} color={COLORS.primary} />
-      </TouchableOpacity>
     </View>
   );
 };
