@@ -13,6 +13,14 @@ import { COLORS } from '../styles/theme';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Region, Circle } from 'react-native-maps';
 import LocationService, { LocationData } from '../services/locationService';
 import MapsService from '../services/mapsService';
+import Geolocation from '@react-native-community/geolocation';
+
+Geolocation.setRNConfiguration({
+  authorizationLevel: 'always',
+  enableBackgroundLocationUpdates: true,
+  locationProvider: 'auto',
+  skipPermissionRequests: false,
+});
 
 interface CustomMapViewProps {
   currentLocation?: { latitude: number; longitude: number } | null;
@@ -216,6 +224,17 @@ const CustomMapView: React.FC<CustomMapViewProps> = ({
       onCustomMarkerPress(type);
     }
   };
+
+  useEffect(() => {
+    Geolocation.requestAuthorization(
+      () => {
+        console.log('Authorization granted');
+      },
+      (error) => {
+        console.log('Authorization error:', error);
+      }
+    );
+  }, []);
 
   // Show loading indicator if loading
   if (isLoading) {
