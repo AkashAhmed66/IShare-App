@@ -187,16 +187,6 @@ const HomeScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>IShare</Text>
-        <TouchableOpacity 
-          style={styles.profileButton}
-          onPress={() => navigation.navigate('ProfileScreen')}
-        >
-          <Ionicons name="person-circle-outline" size={32} color={COLORS.primary} />
-        </TouchableOpacity>
-      </View>
-
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Map Section */}
         <View style={styles.mapContainer}>
@@ -224,9 +214,19 @@ const HomeScreen = () => {
                 setCurrentLocation('Current Location (Simulated)');
               }}
             >
-              <Ionicons name="locate" size={24} color={COLORS.black} />
+              <Ionicons name="locate" size={24} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Add profile button to the map overlay */}
+        <View style={styles.profileButtonOverlay}>
+          <TouchableOpacity 
+            style={styles.profileButton}
+            onPress={() => navigation.navigate('ProfileScreen')}
+          >
+            <Ionicons name="person-circle-outline" size={32} color={COLORS.primary} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.card}>
@@ -395,26 +395,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: SIZES.padding,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.white,
-  },
-  headerTitle: {
-    ...FONTS.h2,
-    color: COLORS.primary,
-  },
-  profileButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   content: {
     flex: 1,
@@ -711,6 +691,25 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     borderWidth: 1,
     borderColor: COLORS.primaryLight,
+  },
+  profileButtonOverlay: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 1000,
+  },
+  profileButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
   },
 });
 

@@ -28,6 +28,18 @@ interface User {
   workAddress: SavedPlace;
   paymentMethods: PaymentMethod[];
   savedPlaces: SavedPlace[];
+  isRider?: boolean;
+  vehicleDetails?: {
+    type: string;
+    make: string;
+    model: string;
+    year: string;
+    licensePlate: string;
+  };
+  riderDocuments?: {
+    drivingLicense: string;
+    insuranceInfo: string;
+  };
 }
 
 interface AuthState {
@@ -114,6 +126,23 @@ const authSlice = createSlice({
         }));
       }
     },
+    convertToRider: (state, action: PayloadAction<{
+      vehicleDetails: User['vehicleDetails'];
+      riderDocuments: User['riderDocuments'];
+    }>) => {
+      if (state.user) {
+        state.user.isRider = true;
+        state.user.vehicleDetails = action.payload.vehicleDetails;
+        state.user.riderDocuments = action.payload.riderDocuments;
+      }
+    },
+    toggleUserMode: (state) => {
+      // No-op if user is not a rider
+      if (state.user && state.user.isRider) {
+        // This will be used to switch between rider and passenger mode in the app
+        // The actual mode state will be managed in a separate slice or component state
+      }
+    },
   },
 });
 
@@ -128,6 +157,8 @@ export const {
   addPaymentMethod,
   removePaymentMethod,
   setDefaultPaymentMethod,
+  convertToRider,
+  toggleUserMode,
 } = authSlice.actions;
 
 export default authSlice.reducer; 

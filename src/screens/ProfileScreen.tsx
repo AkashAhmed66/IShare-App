@@ -7,6 +7,7 @@ import {
   ScrollView,
   SafeAreaView,
   Image,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
@@ -14,14 +15,34 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { COLORS, FONTS, SIZES, SHADOWS } from '../styles/theme';
 import { logout } from '../redux/slices/authSlice';
 import { RootState } from '../redux/store';
+import { AppMode, setAppMode } from '../redux/slices/appModeSlice';
 
 const ProfileScreen = () => {
   const navigation = useNavigation<any>();
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { currentMode } = useSelector((state: RootState) => state.appMode);
 
   const handleLogout = () => {
     dispatch(logout());
+  };
+
+  const handleBecomeDriver = () => {
+    if (user?.isRider) {
+      // User is already a rider, navigate to the App Mode screen
+      navigation.navigate('AppMode');
+    } else {
+      // Navigate to the rider signup screen
+      navigation.navigate('RiderSignup');
+    }
+  };
+
+  const handleSwitchToPassengerMode = () => {
+    dispatch(setAppMode(AppMode.PASSENGER));
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'PassengerMode' }],
+    });
   };
 
   const renderProfileSection = () => (
@@ -67,6 +88,44 @@ const ProfileScreen = () => {
         <Ionicons name="call-outline" size={20} color={COLORS.textSecondary} />
         <Text style={styles.infoText}>{user?.phone}</Text>
       </View>
+    </View>
+  );
+
+  const renderDriverSection = () => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Driver Options</Text>
+      <TouchableOpacity 
+        style={[styles.actionItem, styles.driverButton]}
+        onPress={handleBecomeDriver}
+      >
+        <Ionicons name="car-outline" size={20} color={COLORS.primary} />
+        <Text style={styles.driverButtonText}>
+          {user?.isRider ? 'Switch to Driver Mode' : 'Become a Driver'}
+        </Text>
+        <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+      </TouchableOpacity>
+      
+      {user?.isRider && currentMode === AppMode.RIDER && (
+        <TouchableOpacity 
+          style={[styles.actionItem, styles.passengerButton]}
+          onPress={handleSwitchToPassengerMode}
+        >
+          <Ionicons name="person-outline" size={20} color={COLORS.text} />
+          <Text style={styles.actionText}>Switch to Passenger Mode</Text>
+          <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
+        </TouchableOpacity>
+      )}
+      
+      {user?.isRider && (
+        <TouchableOpacity 
+          style={styles.actionItem}
+          onPress={() => navigation.navigate('RiderEarnings')}
+        >
+          <Ionicons name="cash-outline" size={20} color={COLORS.text} />
+          <Text style={styles.actionText}>My Earnings</Text>
+          <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -206,6 +265,7 @@ const ProfileScreen = () => {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {renderProfileSection()}
         {renderContactSection()}
+        {renderDriverSection()}
         {renderSavedPlacesSection()}
         {renderPaymentSection()}
         {renderActionsSection()}
@@ -249,13 +309,13 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: COLORS.primaryLight,
-    alignItems: 'center',
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   profileInitials: {
     ...FONTS.h3,
-    color: COLORS.primary,
+    color: COLORS.white,
   },
   profileInfo: {
     flex: 1,
@@ -267,18 +327,18 @@ const styles = StyleSheet.create({
   },
   profileRating: {
     ...FONTS.body4,
-    color: COLORS.text,
+    color: COLORS.textSecondary,
   },
   editProfileButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: SIZES.radius - 4,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
+    backgroundColor: COLORS.accent,
   },
   editProfileText: {
     ...FONTS.body4,
     color: COLORS.primary,
+    fontWeight: '600',
   },
   section: {
     backgroundColor: COLORS.white,
@@ -319,9 +379,9 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: COLORS.primaryLight,
-    alignItems: 'center',
+    backgroundColor: COLORS.accent,
     justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
   },
   locationInfo: {
@@ -330,6 +390,7 @@ const styles = StyleSheet.create({
   locationName: {
     ...FONTS.body3,
     color: COLORS.text,
+    fontWeight: '500',
   },
   locationAddress: {
     ...FONTS.body4,
@@ -346,9 +407,9 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: COLORS.primaryLight,
-    alignItems: 'center',
+    backgroundColor: COLORS.accent,
     justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
   },
   paymentInfo: {
@@ -359,13 +420,13 @@ const styles = StyleSheet.create({
   paymentName: {
     ...FONTS.body3,
     color: COLORS.text,
+    marginRight: 8,
   },
   defaultBadge: {
-    backgroundColor: COLORS.primaryLight,
-    borderRadius: SIZES.radius - 8,
+    backgroundColor: COLORS.accent,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    marginLeft: 8,
+    borderRadius: 4,
   },
   defaultText: {
     ...FONTS.body5,
@@ -374,6 +435,7 @@ const styles = StyleSheet.create({
   addPaymentButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 12,
   },
   addPaymentText: {
@@ -391,8 +453,8 @@ const styles = StyleSheet.create({
   actionText: {
     ...FONTS.body3,
     color: COLORS.text,
-    marginLeft: 12,
     flex: 1,
+    marginLeft: 12,
   },
   logoutButton: {
     flexDirection: 'row',
@@ -402,13 +464,34 @@ const styles = StyleSheet.create({
     borderRadius: SIZES.radius,
     padding: 16,
     marginTop: 8,
-    borderWidth: 1,
-    borderColor: COLORS.error,
+    ...SHADOWS.light,
   },
   logoutText: {
     ...FONTS.body3,
     color: COLORS.error,
     marginLeft: 8,
+    fontWeight: '600',
+  },
+  driverButton: {
+    backgroundColor: COLORS.accent,
+    borderRadius: SIZES.radius - 4,
+    borderBottomWidth: 0,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  driverButtonText: {
+    ...FONTS.body3,
+    color: COLORS.primary,
+    flex: 1,
+    marginLeft: 12,
+    fontWeight: '600',
+  },
+  passengerButton: {
+    backgroundColor: COLORS.background,
+    borderRadius: SIZES.radius - 4,
+    borderBottomWidth: 0,
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
 });
 

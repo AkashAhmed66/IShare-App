@@ -168,27 +168,6 @@ const MapScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => {
-            try {
-              if (navigation.canGoBack()) {
-                navigation.goBack();
-              } else {
-                navigation.navigate('Home');
-              }
-            } catch (error) {
-              console.log('Navigation error:', error);
-            }
-          }}
-        >
-          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Set Route</Text>
-        <View style={styles.placeholder} />
-      </View>
-
       <View style={styles.mapContainer}>
         <CustomMapView
           style={styles.map}
@@ -201,6 +180,26 @@ const MapScreen = () => {
         <Text style={styles.simulationNotice}>
           Simulated Map View (Intentional)
         </Text>
+
+        {/* Navigation controls in map overlay */}
+        <View style={styles.mapControls}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => {
+              try {
+                if (navigation.canGoBack()) {
+                  navigation.goBack();
+                } else {
+                  navigation.navigate('Home');
+                }
+              } catch (error) {
+                console.log('Navigation error:', error);
+              }
+            }}
+          >
+            <Ionicons name="arrow-back" size={24} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.locationPanel}>
@@ -257,36 +256,31 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: SIZES.padding,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.white,
+  mapContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  mapControls: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    zIndex: 1000,
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: COLORS.accent,
+    backgroundColor: COLORS.white,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  headerTitle: {
-    ...FONTS.h3,
-    color: COLORS.primary,
-  },
-  placeholder: {
-    width: 40,
-  },
-  mapContainer: {
-    flex: 1,
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   locationPanel: {
     backgroundColor: COLORS.white,

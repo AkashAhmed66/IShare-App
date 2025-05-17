@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useSelector } from 'react-redux';
 import { RootState } from '../redux/store';
+import { AppMode } from '../redux/slices/appModeSlice';
 
 // Screens
 import HomeScreen from '../screens/HomeScreen';
@@ -22,6 +23,12 @@ import RideStatusScreen from '../screens/RideStatusScreen';
 import PaymentScreen from '../screens/PaymentScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import HighDemandScreen from '../screens/HighDemandScreen';
+import AppModeScreen from '../screens/AppModeScreen';
+
+// Rider Screens
+import RiderSignupScreen from '../screens/RiderSignupScreen';
+import RiderHomeScreen from '../screens/RiderHomeScreen';
+import RiderRideScreen from '../screens/RiderRideScreen';
 
 import { COLORS } from '../styles/theme';
 
@@ -31,9 +38,12 @@ const HomeStack = createStackNavigator();
 const RideStack = createStackNavigator();
 const ProfileStack = createStackNavigator();
 const NotificationStack = createStackNavigator();
+const RiderStack = createStackNavigator();
+const MainStack = createStackNavigator();
 
 // Tab navigator
 const Tab = createBottomTabNavigator();
+const RiderTab = createBottomTabNavigator();
 
 // Auth Navigator
 const AuthNavigator = () => (
@@ -133,6 +143,16 @@ const ProfileStackNavigator = () => (
       component={PaymentScreen} 
       options={getCommonHeaderOptions('Payment Methods')}
     />
+    <ProfileStack.Screen 
+      name="RiderSignup" 
+      component={RiderSignupScreen} 
+      options={{ headerShown: false }}
+    />
+    <ProfileStack.Screen 
+      name="AppMode" 
+      component={AppModeScreen} 
+      options={{ headerShown: false }}
+    />
   </ProfileStack.Navigator>
 );
 
@@ -147,8 +167,54 @@ const NotificationStackNavigator = () => (
   </NotificationStack.Navigator>
 );
 
-// Tab Navigator
-const TabNavigator = () => {
+// Rider Stack Navigator
+const RiderStackNavigator = () => (
+  <RiderStack.Navigator>
+    <RiderStack.Screen 
+      name="RiderHomeScreen" 
+      component={RiderHomeScreen} 
+      options={getCommonHeaderOptions('Driver Home')}
+    />
+    <RiderStack.Screen 
+      name="RiderRide" 
+      component={RiderRideScreen} 
+      options={getCommonHeaderOptions('Active Ride')}
+    />
+    <RiderStack.Screen 
+      name="RiderProfile" 
+      component={ProfileScreen} 
+      options={getCommonHeaderOptions('Driver Profile')}
+    />
+    <RiderStack.Screen 
+      name="RiderEarnings" 
+      component={ProfileScreen} // This should be replaced with actual RiderEarningsScreen when available
+      options={getCommonHeaderOptions('My Earnings')}
+    />
+    <RiderStack.Screen 
+      name="RiderRideSummary" 
+      component={ProfileScreen} // This should be replaced with actual RiderRideSummaryScreen when available
+      options={getCommonHeaderOptions('Ride Summary')}
+    />
+    <RiderStack.Screen 
+      name="ProfileScreen" 
+      component={ProfileScreen} 
+      options={getCommonHeaderOptions('Profile')}
+    />
+    <RiderStack.Screen 
+      name="Settings" 
+      component={SettingsScreen} 
+      options={getCommonHeaderOptions('Settings')}
+    />
+    <RiderStack.Screen 
+      name="AppMode" 
+      component={AppModeScreen} 
+      options={{ headerShown: false }}
+    />
+  </RiderStack.Navigator>
+);
+
+// Tab Navigator for Passenger Mode
+const PassengerTabNavigator = () => {
   const unreadCount = useSelector((state: RootState) => state.notification.unreadCount);
   
   return (
@@ -192,13 +258,98 @@ const TabNavigator = () => {
   );
 };
 
+// Tab Navigator for Rider Mode
+const RiderTabNavigator = () => {
+  const unreadCount = useSelector((state: RootState) => state.notification.unreadCount);
+  
+  return (
+    <RiderTab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName = '';
+
+          if (route.name === 'RiderDashboard') {
+            iconName = focused ? 'speedometer' : 'speedometer-outline';
+          } else if (route.name === 'RiderEarnings') {
+            iconName = focused ? 'cash' : 'cash-outline';
+          } else if (route.name === 'RiderProfile') {
+            iconName = focused ? 'person' : 'person-outline';
+          } else if (route.name === 'RiderNotifications') {
+            iconName = focused ? 'notifications' : 'notifications-outline';
+          }
+
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: COLORS.inactive,
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: COLORS.white,
+          borderTopColor: COLORS.border,
+        },
+      })}
+    >
+      <RiderTab.Screen 
+        name="RiderDashboard" 
+        component={RiderStackNavigator} 
+        options={{ title: 'Dashboard' }} 
+      />
+      <RiderTab.Screen 
+        name="RiderNotifications" 
+        component={NotificationStackNavigator}
+        options={{
+          title: 'Notifications',
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+        }}
+      />
+      <RiderTab.Screen 
+        name="RiderProfile" 
+        component={ProfileStackNavigator} 
+        options={{ title: 'Profile' }}
+      />
+    </RiderTab.Navigator>
+  );
+};
+
+// Main Navigator with Mode Switching
+const MainNavigator = () => {
+  const { user } = useSelector((state: RootState) => state.auth);
+  const { currentMode } = useSelector((state: RootState) => state.appMode);
+  
+  return (
+    <MainStack.Navigator screenOptions={{ headerShown: false }}>
+      {currentMode === AppMode.PASSENGER ? (
+        <MainStack.Screen 
+          name="PassengerMode" 
+          component={PassengerTabNavigator}
+          options={{ animationEnabled: false }}
+        />
+      ) : user?.isRider ? (
+        <MainStack.Screen 
+          name="RiderMode" 
+          component={RiderTabNavigator}
+          options={{ animationEnabled: false }}
+        />
+      ) : (
+        <MainStack.Screen 
+          name="PassengerMode" 
+          component={PassengerTabNavigator}
+          options={{ animationEnabled: false }}
+        />
+      )}
+      
+      <MainStack.Screen name="AppMode" component={AppModeScreen} />
+    </MainStack.Navigator>
+  );
+};
+
 // Main App Navigator
 const AppNavigator = () => {
   const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
-
+  
   return (
     <NavigationContainer>
-      {isAuthenticated ? <TabNavigator /> : <AuthNavigator />}
+      {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );
 };

@@ -3,6 +3,7 @@ import authReducer from './slices/authSlice';
 import rideReducer from './slices/rideSlice';
 import mapReducer from './slices/mapSlice';
 import notificationReducer from './slices/notificationSlice';
+import appModeReducer from './slices/appModeSlice';
 
 export const store = configureStore({
   reducer: {
@@ -10,6 +11,7 @@ export const store = configureStore({
     ride: rideReducer,
     map: mapReducer,
     notification: notificationReducer,
+    appMode: appModeReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
