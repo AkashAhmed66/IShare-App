@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Replace this with your actual Google Maps API key
-const GOOGLE_MAPS_API_KEY = 'AIzaSyCIYUPct8PuTHdhQMKkFPQ83Ktxhns5wFw';
+const GOOGLE_MAPS_API_KEY = '333333';
 
 // Type definitions for Google Maps responses
 interface DirectionStep {
