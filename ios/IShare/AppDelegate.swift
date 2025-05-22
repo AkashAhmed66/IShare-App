@@ -16,7 +16,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
     // Initialize Google Maps
-    GMSServices.provideAPIKey("3333333")
+    GMSServices.provideAPIKey("AIzaSyCIYUPct8PuTHdhQMKkFPQ83Ktxhns5wFw")
     
     let delegate = ReactNativeDelegate()
     let factory = RCTReactNativeFactory(delegate: delegate)
