@@ -3,9 +3,14 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../redux/store';
 import { AppMode } from '../redux/slices/appModeSlice';
+import SplashScreen from '../screens/SplashScreen';
+import { useEffect, useState } from 'react';
+import { authService } from '../services/authService';
+import { loginSuccess } from '../redux/slices/authSlice';
+import * as Storage from '../utils/asyncStorageUtils';
 
 // Screens
 import HomeScreen from '../screens/HomeScreen';
@@ -346,6 +351,57 @@ const MainNavigator = () => {
 // Main App Navigator
 const AppNavigator = () => {
   const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
+  const [isLoading, setIsLoading] = useState(true);
+  const dispatch = useDispatch();
+  
+  useEffect(() => {
+    // Check if user is already logged in
+    const checkAuthStatus = async () => {
+      try {
+        // Get token from storage
+        const token = await authService.getToken();
+        
+        if (token) {
+          // Get current user 
+          const user = await authService.getCurrentUser();
+          
+          if (user) {
+            // Prepare user data for Redux
+            const userData = {
+              user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                profilePic: user.profilePic || '',
+                paymentMethods: [],
+                savedPlaces: [],
+                isRider: user.role === 'driver',
+              },
+              token: token
+            };
+            
+            // Dispatch login success to update Redux state
+            dispatch(loginSuccess(userData));
+          }
+        }
+      } catch (error) {
+        console.error('Error checking auth status:', error);
+      } finally {
+        // Set loading to false regardless of outcome
+        setIsLoading(false);
+      }
+    };
+    
+    // Short delay to simulate loading and avoid flash of login screen
+    setTimeout(() => {
+      checkAuthStatus();
+    }, 1000);
+  }, [dispatch]);
+  
+  if (isLoading) {
+    return <SplashScreen />;
+  }
   
   return (
     <NavigationContainer>

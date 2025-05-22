@@ -1,5 +1,4 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { currentUser } from '../../utils/dummyData';
 
 interface PaymentMethod {
   id: string;
@@ -24,8 +23,8 @@ interface User {
   email: string;
   phone: string;
   profilePic: string;
-  homeAddress: SavedPlace;
-  workAddress: SavedPlace;
+  homeAddress?: SavedPlace;
+  workAddress?: SavedPlace;
   paymentMethods: PaymentMethod[];
   savedPlaces: SavedPlace[];
   isRider?: boolean;
@@ -50,12 +49,26 @@ interface AuthState {
   token: string | null;
 }
 
+// For demo purposes, include a demo user
+const demoUser: User = {
+  id: 'demo-user-123',
+  name: 'Demo User',
+  email: 'demo@example.com',
+  phone: '+1234567890',
+  profilePic: '',
+  paymentMethods: [],
+  savedPlaces: []
+};
+
+// Change this to true to demo the app with a pre-logged in user
+const USE_DEMO_USER = false;
+
 const initialState: AuthState = {
-  user: currentUser, // Using dummy data
-  isAuthenticated: true, // Set to true for demo purposes
+  user: USE_DEMO_USER ? demoUser : null,
+  isAuthenticated: USE_DEMO_USER,
   isLoading: false,
   error: null,
-  token: 'dummy-token-12345',
+  token: USE_DEMO_USER ? 'demo-token-123' : null,
 };
 
 const authSlice = createSlice({

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -16,7 +16,9 @@ import { useNavigation } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { COLORS, FONTS, SIZES, SHADOWS } from '../styles/theme';
-import { loginSuccess } from '../redux/slices/authSlice';
+import { loginSuccess, loginStart, loginFailure } from '../redux/slices/authSlice';
+import { authService } from '../services/authService';
+import { API_URL } from '../config/apiConfig';
 
 const LoginScreen = () => {
   const navigation = useNavigation<any>();
@@ -26,50 +28,141 @@ const LoginScreen = () => {
   const [password, setPassword] = useState('');
   const [secureTextEntry, setSecureTextEntry] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [apiStatus, setApiStatus] = useState<{ connected: boolean; message: string }>({
+    connected: false,
+    message: 'Checking connection...'
+  });
+
+  // Check API connection on mount
+  useEffect(() => {
+    checkApiConnection();
+  }, []);
+
+  // Function to check API connection
+  const checkApiConnection = async () => {
+    try {
+      console.log('Testing API connection to:', API_URL);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch(`${API_URL}`, {
+        method: 'GET',
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        console.log('API connection successful');
+        setApiStatus({
+          connected: true,
+          message: 'Connected to server'
+        });
+      } else {
+        console.log('API connection failed with status:', response.status);
+        setApiStatus({
+          connected: false,
+          message: `Server error: ${response.status}`
+        });
+      }
+    } catch (error: any) {
+      console.error('API connection error:', error);
+      setApiStatus({
+        connected: false,
+        message: error.name === 'AbortError' 
+          ? 'Connection timeout' 
+          : `Connection error: ${error.message}`
+      });
+    }
+  };
 
   // Handle login
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
     setIsLoading(true);
+    dispatch(loginStart());
+    
+    console.log(`Attempting to login with API at: ${API_URL}`);
+    console.log(`Email: ${email}`);
 
-    // Mock login - in a real app, this would be an API call
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      // For testing/demo purposes only - use this if your API is not running
+      if (email === 'demo@example.com' && password === 'password') {
+        console.log('Using demo account');
+        
+        // Mock user data for demo purposes
+        const userData = {
+          user: {
+            id: 'demo-user-id',
+            name: 'Demo User',
+            email: email,
+            phone: '+1234567890',
+            profilePic: '',
+            paymentMethods: [],  // Add these to fix the type error
+            savedPlaces: []      // Add these to fix the type error
+          },
+          token: 'mock-token-123'
+        };
+        
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        dispatch(loginSuccess(userData));
+        console.log('Demo login successful');
+        return;
+      }
       
-      // Mock user data
+      // Call the login API through authService
+      console.log('Calling login API...');
+      const user = await authService.login(email, password);
+      console.log('API response received:', JSON.stringify(user));
+      
+      // Get the auth token
+      const token = await authService.getToken();
+      
+      if (!user || !token) {
+        throw new Error('Login failed: Invalid response from server');
+      }
+      
+      console.log('Login successful for user:', user.name);
+      
+      // Create the user data object to match the expected structure
       const userData = {
         user: {
-          id: '1',
-          name: 'John Doe',
-          email: email,
-          phone: '+1234567890',
-          profilePic: '',
-          homeAddress: {
-            id: '1',
-            name: 'Home',
-            address: '123 Home Street',
-            latitude: 37.7749,
-            longitude: -122.4194
-          },
-          workAddress: {
-            id: '2',
-            name: 'Work',
-            address: '456 Office Building',
-            latitude: 37.7749,
-            longitude: -122.4194
-          },
-          paymentMethods: [],
-          savedPlaces: []
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          profilePic: user.profilePic || '',
+          paymentMethods: [], // Adding these empty arrays to match required type
+          savedPlaces: [],    // Adding these empty arrays to match required type
         },
-        token: 'mock-token-123'
+        token: token
       };
       
+      // Dispatch success action to Redux
       dispatch(loginSuccess(userData));
-    }, 1500);
+    } catch (error: any) {
+      console.error('Login failed:', error);
+      
+      // Get detailed error message
+      const errorMessage = error.response?.data?.message || error.message || 'Invalid email or password';
+      console.log('Error details:', errorMessage);
+      
+      dispatch(loginFailure(errorMessage));
+      
+      Alert.alert(
+        'Login Failed',
+        errorMessage
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const toggleSecureTextEntry = () => {
@@ -86,6 +179,21 @@ const LoginScreen = () => {
           <View style={styles.header}>
             <Text style={styles.appName}>IShare</Text>
             <Text style={styles.tagline}>Ride together, save together</Text>
+            <Text style={styles.apiUrl}>{API_URL}</Text>
+            <Text style={[
+              styles.connectionStatus,
+              { color: apiStatus.connected ? COLORS.success : COLORS.error }
+            ]}>
+              {apiStatus.message}
+            </Text>
+            {!apiStatus.connected && (
+              <TouchableOpacity 
+                style={styles.retryButton}
+                onPress={checkApiConnection}
+              >
+                <Text style={styles.retryText}>Retry Connection</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.formContainer}>
@@ -186,6 +294,26 @@ const styles = StyleSheet.create({
   tagline: {
     ...FONTS.body3,
     color: COLORS.textSecondary,
+  },
+  apiUrl: {
+    ...FONTS.body4,
+    color: COLORS.textSecondary,
+    marginTop: 8,
+  },
+  connectionStatus: {
+    ...FONTS.body4,
+    marginTop: 4
+  },
+  retryButton: {
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.primary,
+    borderRadius: 4
+  },
+  retryText: {
+    ...FONTS.body4,
+    color: COLORS.white
   },
   formContainer: {
     backgroundColor: COLORS.white,

@@ -7,13 +7,12 @@ import {
   setSocketConnected,
 } from '../redux/slices/notificationSlice';
 import { updateDriverLocation } from '../redux/slices/mapSlice';
-
-// Using a dummy socket URL for demonstration
-const SOCKET_URL = 'https://api.ishare-app.com';
+import { SOCKET_URL } from '../config/apiConfig';
 
 class SocketService {
   private socket: Socket | null = null;
   private userId: string | null = null;
+  private userType: 'passenger' | 'driver' | null = null;
 
   // Initialize socket connection
   initialize(userId: string): void {
@@ -22,34 +21,80 @@ class SocketService {
     // Close existing connection if any
     this.disconnect();
     
-    // Create new connection
-    this.socket = io(SOCKET_URL, {
-      query: { userId },
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 10,
-    });
+    console.log(`[Socket] Initializing socket connection to ${SOCKET_URL}`);
+    console.log(`[Socket] Connecting as user ${userId}`);
     
-    this.setupListeners();
+    try {
+      // Create new connection
+      this.socket = io(SOCKET_URL, {
+        query: { userId },
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 10,
+        timeout: 10000
+      });
+      
+      this.setupListeners();
+      console.log('[Socket] Socket connection initialized');
+    } catch (error) {
+      console.error('[Socket] Error initializing socket:', error);
+    }
+  }
+  
+  // Authenticate user (can be called after initialization)
+  authenticateUser(userId: string, userType: 'passenger' | 'driver'): void {
+    console.log(`[Socket] Authenticating user ${userId} as ${userType}`);
+    this.userId = userId;
+    this.userType = userType;
+    
+    if (this.socket) {
+      this.socket.emit('authenticate', { userId, userType });
+    } else {
+      console.log('[Socket] Socket not connected, initializing first');
+      this.initialize(userId);
+      if (this.socket) {
+        this.socket.emit('authenticate', { userId, userType });
+      }
+    }
+  }
+  
+  // Check if socket is connected
+  isConnected(): boolean {
+    return !!this.socket?.connected;
   }
   
   // Set up event listeners
   private setupListeners(): void {
-    if (!this.socket) return;
+    if (!this.socket) {
+      console.warn('[Socket] Cannot setup listeners, socket is null');
+      return;
+    }
     
     this.socket.on('connect', () => {
-      console.log('Socket connected');
+      console.log('[Socket] Connected');
       store.dispatch(setSocketConnected(true));
+      
+      // Re-authenticate if we have userId and userType
+      if (this.userId && this.userType) {
+        this.socket?.emit('authenticate', { 
+          userId: this.userId, 
+          userType: this.userType 
+        });
+      }
     });
     
     this.socket.on('disconnect', () => {
-      console.log('Socket disconnected');
+      console.log('[Socket] Disconnected');
       store.dispatch(setSocketConnected(false));
     });
     
+    this.socket.on('connect_error', (error) => {
+      console.error('[Socket] Connection error:', error.message);
+    });
+    
     this.socket.on('driver_update', (data) => {
-      console.log('Driver update received:', data);
+      console.log('[Socket] Driver update received:', data);
       store.dispatch(receiveDriverUpdate(data));
       
       // Also update the driver's location on the map
@@ -62,26 +107,26 @@ class SocketService {
     });
     
     this.socket.on('high_demand_update', (data) => {
-      console.log('High demand update received:', data);
+      console.log('[Socket] High demand update received:', data);
       store.dispatch(receiveHighDemandUpdate(data));
     });
     
     this.socket.on('promo_notification', (data) => {
-      console.log('Promo notification received:', data);
+      console.log('[Socket] Promo notification received:', data);
       store.dispatch(receivePromoNotification(data));
     });
     
     // Error handling
     this.socket.on('error', (error) => {
-      console.error('Socket error:', error);
+      console.error('[Socket] Error:', error);
     });
     
     this.socket.on('reconnect_attempt', (attemptNumber) => {
-      console.log(`Socket reconnect attempt #${attemptNumber}`);
+      console.log(`[Socket] Reconnect attempt #${attemptNumber}`);
     });
     
     this.socket.on('reconnect_failed', () => {
-      console.error('Socket reconnection failed');
+      console.error('[Socket] Reconnection failed');
     });
   }
   
@@ -112,6 +157,7 @@ class SocketService {
   // Disconnect socket
   disconnect(): void {
     if (this.socket) {
+      console.log('[Socket] Disconnecting');
       this.socket.disconnect();
       this.socket = null;
       store.dispatch(setSocketConnected(false));
@@ -141,4 +187,5 @@ class SocketService {
   }
 }
 
-export default new SocketService(); 
+// Export as named export instead of default
+export const socketService = new SocketService(); 
