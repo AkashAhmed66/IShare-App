@@ -366,7 +366,21 @@ const AppNavigator = () => {
           const user = await authService.getCurrentUser();
           
           if (user) {
-            // Prepare user data for Redux
+            console.log('Found existing session, restoring user data');
+            
+            // Map payment methods from API response format to Redux format
+            const mappedPaymentMethods = (user.paymentMethods || []).map(method => ({
+              ...method,
+              id: method._id || method.id || `payment-${Math.random().toString(36).substring(2, 9)}`
+            }));
+            
+            // Map saved places from API response format to Redux format
+            const mappedSavedPlaces = (user.savedPlaces || []).map(place => ({
+              ...place,
+              id: place._id || place.id || `place-${Math.random().toString(36).substring(2, 9)}`
+            }));
+            
+            // Prepare user data for Redux with all fields from the saved user data
             const userData = {
               user: {
                 id: user._id,
@@ -374,9 +388,19 @@ const AppNavigator = () => {
                 email: user.email,
                 phone: user.phone,
                 profilePic: user.profilePic || '',
-                paymentMethods: [],
-                savedPlaces: [],
-                isRider: user.role === 'driver',
+                homeAddress: user.homeAddress ? {
+                  ...user.homeAddress,
+                  id: user.homeAddress._id || user.homeAddress.id || `home-${Math.random().toString(36).substring(2, 9)}`
+                } : undefined,
+                workAddress: user.workAddress ? {
+                  ...user.workAddress,
+                  id: user.workAddress._id || user.workAddress.id || `work-${Math.random().toString(36).substring(2, 9)}`
+                } : undefined,
+                paymentMethods: mappedPaymentMethods,
+                savedPlaces: mappedSavedPlaces,
+                isRider: user.role === 'driver' || (user.driverInfo?.isActive === true),
+                isVerified: user.isVerified,
+                rating: user.rating
               },
               token: token
             };

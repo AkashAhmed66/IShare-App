@@ -1,4 +1,6 @@
-// Create a pure in-memory implementation since AsyncStorage native module is null
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Fallback in-memory storage in case AsyncStorage fails
 const inMemoryStorage = new Map<string, string>();
 
 /**
@@ -7,7 +9,14 @@ const inMemoryStorage = new Map<string, string>();
 export const getItem = async (key: string): Promise<string | null> => {
   try {
     console.log(`Getting value for key: ${key}`);
-    return inMemoryStorage.get(key) || null;
+    // Try to get from actual AsyncStorage first
+    try {
+      const value = await AsyncStorage.getItem(key);
+      return value;
+    } catch (asyncError) {
+      console.warn(`AsyncStorage error, falling back to in-memory for key ${key}:`, asyncError);
+      return inMemoryStorage.get(key) || null;
+    }
   } catch (error) {
     console.error(`Error getting item ${key} from storage:`, error);
     return null;
@@ -19,7 +28,16 @@ export const getItem = async (key: string): Promise<string | null> => {
  */
 export const setItem = async (key: string, value: string): Promise<boolean> => {
   try {
-    console.log(`Setting key: ${key} with value: ${value}`);
+    console.log(`Setting key: ${key} with value length: ${value.length}`);
+    
+    // Store in both AsyncStorage and in-memory fallback
+    try {
+      await AsyncStorage.setItem(key, value);
+    } catch (asyncError) {
+      console.warn(`AsyncStorage error, using only in-memory for key ${key}:`, asyncError);
+    }
+    
+    // Also store in memory as fallback
     inMemoryStorage.set(key, value);
     return true;
   } catch (error) {
@@ -34,6 +52,15 @@ export const setItem = async (key: string, value: string): Promise<boolean> => {
 export const removeItem = async (key: string): Promise<boolean> => {
   try {
     console.log(`Removing key: ${key}`);
+    
+    // Remove from both AsyncStorage and in-memory fallback
+    try {
+      await AsyncStorage.removeItem(key);
+    } catch (asyncError) {
+      console.warn(`AsyncStorage error while removing key ${key}:`, asyncError);
+    }
+    
+    // Also remove from in-memory fallback
     inMemoryStorage.delete(key);
     return true;
   } catch (error) {
@@ -46,35 +73,57 @@ export const removeItem = async (key: string): Promise<boolean> => {
  * Test if storage is available
  */
 export const testAsyncStorage = async (): Promise<boolean> => {
-  // In-memory storage is always available
-  return true;
+  try {
+    await AsyncStorage.setItem('__test__', 'test');
+    await AsyncStorage.removeItem('__test__');
+    return true;
+  } catch (error) {
+    console.warn('AsyncStorage is not available, using in-memory storage');
+    return false;
+  }
 };
 
-// Export a mock AsyncStorage interface
+// Export a compatible AsyncStorage interface
 export default {
-  getItem: (key: string) => Promise.resolve(inMemoryStorage.get(key) || null),
-  setItem: (key: string, value: string) => {
-    inMemoryStorage.set(key, value);
-    return Promise.resolve(null);
+  getItem,
+  setItem,
+  removeItem,
+  getAllKeys: async () => {
+    try {
+      return await AsyncStorage.getAllKeys();
+    } catch (error) {
+      return Array.from(inMemoryStorage.keys());
+    }
   },
-  removeItem: (key: string) => {
-    inMemoryStorage.delete(key);
-    return Promise.resolve(null);
+  multiGet: async (keys: string[]) => {
+    try {
+      return await AsyncStorage.multiGet(keys);
+    } catch (error) {
+      return keys.map(key => [key, inMemoryStorage.get(key) || null]);
+    }
   },
-  getAllKeys: () => Promise.resolve(Array.from(inMemoryStorage.keys())),
-  multiGet: (keys: string[]) => Promise.resolve(
-    keys.map(key => [key, inMemoryStorage.get(key) || null])
-  ),
-  multiSet: (keyValuePairs: [string, string][]) => {
-    keyValuePairs.forEach(([key, value]) => inMemoryStorage.set(key, value));
-    return Promise.resolve(null);
+  multiSet: async (keyValuePairs: [string, string][]) => {
+    try {
+      await AsyncStorage.multiSet(keyValuePairs);
+    } catch (error) {
+      keyValuePairs.forEach(([key, value]) => inMemoryStorage.set(key, value));
+    }
+    return null;
   },
-  multiRemove: (keys: string[]) => {
-    keys.forEach(key => inMemoryStorage.delete(key));
-    return Promise.resolve(null);
+  multiRemove: async (keys: string[]) => {
+    try {
+      await AsyncStorage.multiRemove(keys);
+    } catch (error) {
+      keys.forEach(key => inMemoryStorage.delete(key));
+    }
+    return null;
   },
-  clear: () => {
-    inMemoryStorage.clear();
-    return Promise.resolve(null);
+  clear: async () => {
+    try {
+      await AsyncStorage.clear();
+    } catch (error) {
+      inMemoryStorage.clear();
+    }
+    return null;
   },
 }; 

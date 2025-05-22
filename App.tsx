@@ -9,6 +9,7 @@ import { store } from './src/redux/store';
 import AppNavigator from './src/navigation/AppNavigator';
 import { COLORS } from './src/styles/theme';
 import { API_URL } from './src/config/apiConfig';
+import * as Storage from './src/utils/asyncStorageUtils';
 
 // Ignore specific warnings that we can't fix
 LogBox.ignoreLogs([
@@ -17,7 +18,16 @@ LogBox.ignoreLogs([
   'Sending `onAnimatedValueUpdate`'
 ]);
 
+// Define custom global type to include our custom properties
+declare global {
+  var asyncStorageBackup: Map<string, string>;
+  interface WindowEventMap {
+    unhandledrejection: PromiseRejectionEvent;
+  }
+}
+
 // Install a global fallback for AsyncStorage
+// @ts-ignore
 global.asyncStorageBackup = new Map<string, string>();
 
 function App(): React.JSX.Element {
@@ -26,7 +36,19 @@ function App(): React.JSX.Element {
     console.log('===== IShare App Initializing =====');
     console.log('API URL:', API_URL);
     
-    // Set up global error handler
+    // Test AsyncStorage availability
+    const checkStorage = async () => {
+      const isAvailable = await Storage.testAsyncStorage();
+      console.log(`AsyncStorage available: ${isAvailable}`);
+      
+      if (!isAvailable) {
+        console.warn('Using in-memory storage fallback');
+      }
+    };
+    
+    checkStorage();
+    
+    // Set up global error handler for AsyncStorage issues
     const originalConsoleError = console.error;
     
     console.error = (...args: any[]) => {
@@ -40,23 +62,8 @@ function App(): React.JSX.Element {
       originalConsoleError(...args);
     };
     
-    // Set up global unhandled promise rejection handler
-    const handlePromiseRejection = (event: any) => {
-      console.error('UNHANDLED PROMISE REJECTION:', event.reason);
-    };
-
-    // Add event listener
-    if (global.addEventListener) {
-      global.addEventListener('unhandledrejection', handlePromiseRejection);
-    }
-    
     return () => {
       console.error = originalConsoleError;
-      
-      // Remove event listener
-      if (global.removeEventListener) {
-        global.removeEventListener('unhandledrejection', handlePromiseRejection);
-      }
     };
   }, []);
   
