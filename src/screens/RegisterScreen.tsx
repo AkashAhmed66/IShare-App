@@ -9,13 +9,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { COLORS, FONTS, SIZES, SHADOWS } from '../styles/theme';
 import { loginSuccess } from '../redux/slices/authSlice';
+import { authService } from '../services/authService';
 
 const RegisterScreen = () => {
   const navigation = useNavigation<any>();
@@ -29,6 +31,7 @@ const RegisterScreen = () => {
   const [secureTextEntry, setSecureTextEntry] = useState(true);
   const [secureConfirmTextEntry, setSecureConfirmTextEntry] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const toggleSecureTextEntry = () => {
     setSecureTextEntry(!secureTextEntry);
@@ -38,54 +41,77 @@ const RegisterScreen = () => {
     setSecureConfirmTextEntry(!secureConfirmTextEntry);
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
+    // Reset error state
+    setError(null);
+    
     // Basic validation
     if (!name || !email || !phone || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      setError('Please fill in all fields');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    // Email validation with regex
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError('Please enter a valid email address');
       return;
     }
 
     setIsLoading(true);
 
-    // Mock registration - in a real app, this would be an API call
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      // Call the registration API
+      const user = await authService.register({
+        name,
+        email,
+        phone,
+        password,
+        role: 'user'
+      });
 
-      // Mock user data
-      const userData = {
-        user: {
-          id: '1',
-          name: name,
-          email: email,
-          phone: phone,
-          profilePic: '',
-          homeAddress: {
-            id: '1',
-            name: 'Home',
-            address: 'Set your home address',
-            latitude: 37.7749,
-            longitude: -122.4194
-          },
-          workAddress: {
-            id: '2',
-            name: 'Work',
-            address: 'Set your work address',
-            latitude: 37.7749,
-            longitude: -122.4194
-          },
-          paymentMethods: [],
-          savedPlaces: []
-        },
-        token: 'mock-token-123'
-      };
+      // Successful registration - explicitly dispatch loginSuccess to update Redux store
+      console.log('Registration successful:', user);
       
-      dispatch(loginSuccess(userData));
-    }, 1500);
+      // Manually dispatch success to ensure user is logged in
+      dispatch(loginSuccess({
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          profilePic: user.profilePic || '',
+          paymentMethods: user.paymentMethods || [],
+          savedPlaces: user.savedPlaces || []
+        },
+        token: await authService.getToken() || ''
+      }));
+      
+      // Force navigation to home screen
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'PassengerMode' }],
+      });
+    } catch (error: any) {
+      // Handle registration errors
+      console.error('Registration error:', error);
+      const errorMessage = error.response?.data?.message || 
+                          error.message || 
+                          'Registration failed. Please try again.';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -108,6 +134,13 @@ const RegisterScreen = () => {
           <View style={styles.formContainer}>
             <Text style={styles.title}>Create Account</Text>
             
+            {error ? (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={20} color={COLORS.error} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+            
             <View style={styles.inputContainer}>
               <Ionicons name="person-outline" size={20} color={COLORS.textSecondary} style={styles.inputIcon} />
               <TextInput
@@ -116,6 +149,7 @@ const RegisterScreen = () => {
                 placeholderTextColor={COLORS.textSecondary}
                 value={name}
                 onChangeText={setName}
+                editable={!isLoading}
               />
             </View>
 
@@ -129,6 +163,7 @@ const RegisterScreen = () => {
                 autoCapitalize="none"
                 value={email}
                 onChangeText={setEmail}
+                editable={!isLoading}
               />
             </View>
 
@@ -141,6 +176,7 @@ const RegisterScreen = () => {
                 keyboardType="phone-pad"
                 value={phone}
                 onChangeText={setPhone}
+                editable={!isLoading}
               />
             </View>
 
@@ -153,8 +189,9 @@ const RegisterScreen = () => {
                 secureTextEntry={secureTextEntry}
                 value={password}
                 onChangeText={setPassword}
+                editable={!isLoading}
               />
-              <TouchableOpacity onPress={toggleSecureTextEntry} style={styles.eyeIcon}>
+              <TouchableOpacity onPress={toggleSecureTextEntry} style={styles.eyeIcon} disabled={isLoading}>
                 <Ionicons
                   name={secureTextEntry ? 'eye-outline' : 'eye-off-outline'}
                   size={20}
@@ -172,8 +209,9 @@ const RegisterScreen = () => {
                 secureTextEntry={secureConfirmTextEntry}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
+                editable={!isLoading}
               />
-              <TouchableOpacity onPress={toggleSecureConfirmTextEntry} style={styles.eyeIcon}>
+              <TouchableOpacity onPress={toggleSecureConfirmTextEntry} style={styles.eyeIcon} disabled={isLoading}>
                 <Ionicons
                   name={secureConfirmTextEntry ? 'eye-outline' : 'eye-off-outline'}
                   size={20}
@@ -193,14 +231,17 @@ const RegisterScreen = () => {
               onPress={handleRegister}
               disabled={isLoading}
             >
-              <Text style={styles.buttonText}>
-                {isLoading ? 'Creating Account...' : 'Create Account'}
-              </Text>
+              {isLoading ? (
+                <ActivityIndicator color={COLORS.white} size="small" />
+              ) : (
+                <Text style={styles.buttonText}>Create Account</Text>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity 
               style={styles.loginContainer}
               onPress={() => navigation.navigate('Login')}
+              disabled={isLoading}
             >
               <Text style={styles.loginText}>
                 Already have an account? <Text style={styles.loginLink}>Login</Text>
@@ -251,63 +292,77 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: SIZES.radius - 4,
-    paddingHorizontal: 16,
-    marginBottom: 16,
-    height: 50,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    marginBottom: 20,
+    paddingBottom: 8,
   },
   inputIcon: {
-    marginRight: 10,
+    marginRight: 12,
   },
   input: {
     flex: 1,
-    height: 50,
     ...FONTS.body3,
     color: COLORS.text,
+    paddingVertical: 8,
   },
   eyeIcon: {
-    padding: 8,
+    padding: 4,
+  },
+  button: {
+    backgroundColor: COLORS.primary,
+    borderRadius: SIZES.radius - 4,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  buttonText: {
+    ...FONTS.body2,
+    color: COLORS.white,
+    fontWeight: '600',
   },
   termsText: {
-    ...FONTS.body5,
+    ...FONTS.body4,
     color: COLORS.textSecondary,
-    marginBottom: 24,
     textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 16,
   },
   linkText: {
     color: COLORS.primary,
     fontWeight: '600',
   },
-  button: {
-    backgroundColor: COLORS.primary,
-    borderRadius: SIZES.radius - 4,
-    height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  disabledButton: {
-    backgroundColor: COLORS.inactive,
-  },
-  buttonText: {
-    ...FONTS.body3,
-    color: COLORS.white,
-    fontWeight: '600',
-  },
   loginContainer: {
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 12,
   },
   loginText: {
-    ...FONTS.body4,
+    ...FONTS.body3,
     color: COLORS.textSecondary,
   },
   loginLink: {
     color: COLORS.primary,
     fontWeight: '600',
   },
+  disabledButton: {
+    backgroundColor: COLORS.primary + '80', // Adding opacity
+    opacity: 0.8,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.errorLight || '#FFEBEE',
+    borderRadius: SIZES.radius - 4,
+    padding: 12,
+    marginBottom: 16,
+  },
+  errorText: {
+    ...FONTS.body3,
+    color: COLORS.error,
+    marginLeft: 8,
+    flex: 1,
+  }
 });
 
 export default RegisterScreen; 
