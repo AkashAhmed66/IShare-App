@@ -103,9 +103,12 @@ const authSlice = createSlice({
       state.error = action.payload;
     },
     logout: (state) => {
+      // Reset to initial state
       state.isAuthenticated = false;
       state.user = null;
       state.token = null;
+      state.isLoading = false;
+      state.error = null;
     },
     updateUserProfile: (state, action: PayloadAction<Partial<User>>) => {
       if (state.user) {

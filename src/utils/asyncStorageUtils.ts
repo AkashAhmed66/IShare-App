@@ -83,11 +83,37 @@ export const testAsyncStorage = async (): Promise<boolean> => {
   }
 };
 
+/**
+ * Clear all storage
+ * This should be called during logout to ensure all data is cleared
+ */
+export const clearAllStorage = async (): Promise<boolean> => {
+  try {
+    console.log('Clearing all storage');
+    
+    // Clear AsyncStorage
+    try {
+      await AsyncStorage.clear();
+    } catch (asyncError) {
+      console.warn('AsyncStorage error while clearing storage:', asyncError);
+    }
+    
+    // Clear in-memory fallback
+    inMemoryStorage.clear();
+    console.log('All storage cleared successfully');
+    return true;
+  } catch (error) {
+    console.error('Error clearing storage:', error);
+    return false;
+  }
+};
+
 // Export a compatible AsyncStorage interface
 export default {
   getItem,
   setItem,
   removeItem,
+  clearAllStorage,
   getAllKeys: async () => {
     try {
       return await AsyncStorage.getAllKeys();

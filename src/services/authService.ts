@@ -377,9 +377,9 @@ class AuthService {
   private async clearSession(): Promise<void> {
     try {
       console.log('[Auth] Clearing session data');
-      await Storage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
-      await Storage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
-      await Storage.removeItem(STORAGE_KEYS.USER);
+      
+      // Use the clearAllStorage function instead of individual removal
+      await Storage.clearAllStorage();
       
       this.currentUser = null;
       

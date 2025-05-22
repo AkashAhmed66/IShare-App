@@ -382,57 +382,51 @@ const AppNavigator = () => {
               id: place._id || place.id || `place-${Math.random().toString(36).substring(2, 9)}`
             }));
             
-            // Prepare user data for Redux with all fields from the saved user data
-            const userData = {
-              user: {
-                id: user._id,
-                name: user.name,
-                email: user.email,
-                phone: user.phone,
-                profilePic: user.profilePic || '',
-                homeAddress: user.homeAddress ? {
-                  ...user.homeAddress,
-                  id: user.homeAddress._id || user.homeAddress.id || `home-${Math.random().toString(36).substring(2, 9)}`
-                } : undefined,
-                workAddress: user.workAddress ? {
-                  ...user.workAddress,
-                  id: user.workAddress._id || user.workAddress.id || `work-${Math.random().toString(36).substring(2, 9)}`
-                } : undefined,
-                paymentMethods: mappedPaymentMethods,
-                savedPlaces: mappedSavedPlaces,
-                isRider: user.role === 'driver' || (user.driverInfo?.isActive === true),
-                isVerified: user.isVerified,
-                rating: user.rating
-              },
-              token: token
-            };
+            // Update local Redux state with stored user data
+            dispatch(
+              loginSuccess({
+                user: {
+                  ...user,
+                  id: user._id || user.id,
+                  paymentMethods: mappedPaymentMethods,
+                  savedPlaces: mappedSavedPlaces,
+                },
+                token,
+              })
+            );
             
-            // Dispatch login success to update Redux state
-            dispatch(loginSuccess(userData));
+            // Initialize services
+            socketService.initializeSocket();
+            socketService.authenticateUser(
+              user._id || user.id,
+              user.role === 'driver' ? 'driver' : 'passenger'
+            );
             
-            // Initialize socket connection with user ID and fetch notifications
-            socketService.initialize(user._id);
+            // Initialize notification service
+            notificationService.initialize();
             
-            // Attempt to load saved notifications
-            try {
-              await notificationService.getNotifications();
-            } catch (error) {
-              console.log('Could not load notifications:', error);
-            }
+            console.log('User session restored successfully');
+          } else {
+            // We have a token but no user - this is inconsistent state
+            // Clear the token and force re-login
+            console.warn('Invalid session state: token exists but no user data found');
+            await authService.logout();
           }
+        } else {
+          // No token found, ensure session is cleared
+          console.log('No authentication token found, ensuring session is cleared');
+          await authService.logout();
         }
       } catch (error) {
-        console.error('Error checking auth status:', error);
+        console.error('Error restoring auth state:', error);
+        // If there's an error, clear the session to be safe
+        await authService.logout();
       } finally {
-        // Set loading to false regardless of outcome
         setIsLoading(false);
       }
     };
     
-    // Short delay to simulate loading and avoid flash of login screen
-    setTimeout(() => {
-      checkAuthStatus();
-    }, 1000);
+    checkAuthStatus();
   }, [dispatch]);
   
   if (isLoading) {
