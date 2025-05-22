@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,31 +7,175 @@ import {
   ScrollView,
   SafeAreaView,
   Image,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { COLORS, FONTS, SIZES, SHADOWS } from '../styles/theme';
+import { socketService } from '../services/socketService';
+import { useSelector } from 'react-redux';
 
 const RideConfirmationScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { rideOption, scheduledTime } = route.params || {};
+  const { rideOption, scheduledTime, pickupLocation, dropoffLocation } = route.params || {};
 
-  const [paymentMethod, setPaymentMethod] = useState('Credit Card');
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [rideId, setRideId] = useState<string | null>(null);
+  
+  // Get user ID from authentication state
+  const { user } = useSelector((state: any) => state.auth);
+  
+  // Effect to check socket connection
+  useEffect(() => {
+    const checkConnection = () => {
+      const connected = socketService.isConnected();
+      setIsConnected(connected);
+      
+      if (!connected && user?.id) {
+        console.log('Socket not connected, attempting to connect...');
+        socketService.initialize(user.id);
+        socketService.authenticateUser(user.id, 'passenger');
+      }
+    };
+    
+    checkConnection();
+    
+    // Check connection periodically
+    const interval = setInterval(checkConnection, 5000);
+    
+    return () => clearInterval(interval);
+  }, [user]);
 
+  // Handle ride confirmation
   const handleConfirm = () => {
+    if (!isConnected) {
+      Alert.alert(
+        'Connection Error',
+        'Not connected to the server. Please check your internet connection and try again.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
+    if (!pickupLocation || !dropoffLocation) {
+      Alert.alert(
+        'Error',
+        'Please select both pickup and dropoff locations',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
     setIsConfirming(true);
     
-    // Simulate loading
-    setTimeout(() => {
+    // Calculate distance using haversine formula (straight line)
+    const distance = calculateDistance(
+      pickupLocation.latitude,
+      pickupLocation.longitude,
+      dropoffLocation.latitude,
+      dropoffLocation.longitude
+    );
+    
+    // Calculate estimated price based on distance (20 taka per km)
+    const estimatedPrice = Math.round(distance * 20);
+    
+    // Prepare ride details
+    const rideDetails = {
+      pickupLocation,
+      dropoffLocation,
+      rideType: rideOption?.type || 'standard',
+      estimatedDistance: distance,
+      estimatedDuration: Math.round(distance * 3), // Rough estimate: 20 km/h = 3 min/km
+      estimatedPrice,
+      paymentMethod,
+      scheduledTime: scheduledTime || null,
+      isScheduled: !!scheduledTime
+    };
+    
+    console.log('Sending ride request with details:', rideDetails);
+    
+    // Send ride request via WebSocket
+    socketService.sendRideRequest(rideDetails);
+    
+    // Listen for ride request confirmation
+    const rideRequestListener = (data: any) => {
+      console.log('Received ride request confirmation:', data);
+      setRideId(data.rideId);
       setIsConfirming(false);
+      
+      // Navigate to ride status screen
       navigation.navigate('RideStatus', {
-        rideOption,
+        rideId: data.rideId,
+        rideOption: {
+          ...rideOption,
+          price: data.estimatedPrice
+        },
         scheduledTime,
-        paymentMethod
+        paymentMethod,
+        pickupLocation,
+        dropoffLocation,
+        estimatedDistance: data.estimatedDistance,
+        currency: data.currency || 'BDT'
       });
-    }, 1500);
+      
+      // Remove listener after use
+      socketService.socket?.off('ride_request_received', rideRequestListener);
+    };
+    
+    // Listen for errors
+    const errorListener = (data: any) => {
+      console.error('Ride request error:', data);
+      setIsConfirming(false);
+      
+      Alert.alert(
+        'Request Failed',
+        data.message || 'Failed to request ride. Please try again.',
+        [{ text: 'OK' }]
+      );
+      
+      // Remove listener after use
+      socketService.socket?.off('ride_request_error', errorListener);
+    };
+    
+    // Add temporary listeners
+    socketService.socket?.on('ride_request_received', rideRequestListener);
+    socketService.socket?.on('ride_request_error', errorListener);
+    
+    // Set timeout to prevent indefinite loading
+    setTimeout(() => {
+      if (isConfirming) {
+        setIsConfirming(false);
+        Alert.alert(
+          'Request Timeout',
+          'The server took too long to respond. Please try again.',
+          [{ text: 'OK' }]
+        );
+        socketService.socket?.off('ride_request_received', rideRequestListener);
+        socketService.socket?.off('ride_request_error', errorListener);
+      }
+    }, 15000);
+  };
+
+  // Calculate distance between two coordinates in kilometers (Haversine formula)
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in km
+  };
+
+  // Convert degrees to radians
+  const deg2rad = (deg: number) => {
+    return deg * (Math.PI / 180);
   };
 
   const formattedTime = scheduledTime
@@ -44,17 +188,6 @@ const RideConfirmationScreen = () => {
       })
     : 'Now';
 
-  // Mock pickup and dropoff locations
-  const pickup = {
-    name: 'Current Location',
-    address: '123 Main St, Anytown, USA',
-  };
-
-  const dropoff = {
-    name: 'Central Mall',
-    address: '456 Shopping Ave, Anytown, USA',
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -65,6 +198,15 @@ const RideConfirmationScreen = () => {
             <Text style={styles.mapPlaceholderText}>Map Preview</Text>
           </View>
         </View>
+
+        {!isConnected && (
+          <View style={styles.connectionWarning}>
+            <Ionicons name="wifi" size={20} color={COLORS.error} />
+            <Text style={styles.connectionWarningText}>
+              Not connected to server. Checking connection...
+            </Text>
+          </View>
+        )}
 
         <View style={styles.card}>
           <View style={styles.locationContainer}>
@@ -80,15 +222,23 @@ const RideConfirmationScreen = () => {
             
             <View style={styles.locationDetails}>
               <View style={styles.locationItem}>
-                <Text style={styles.locationName}>{pickup.name}</Text>
-                <Text style={styles.locationAddress}>{pickup.address}</Text>
+                <Text style={styles.locationName}>
+                  {pickupLocation?.name || 'Current Location'}
+                </Text>
+                <Text style={styles.locationAddress}>
+                  {pickupLocation?.address || 'Loading address...'}
+                </Text>
               </View>
               
               <View style={styles.divider} />
               
               <View style={styles.locationItem}>
-                <Text style={styles.locationName}>{dropoff.name}</Text>
-                <Text style={styles.locationAddress}>{dropoff.address}</Text>
+                <Text style={styles.locationName}>
+                  {dropoffLocation?.name || 'Destination'}
+                </Text>
+                <Text style={styles.locationAddress}>
+                  {dropoffLocation?.address || 'Loading address...'}
+                </Text>
               </View>
             </View>
           </View>
@@ -100,7 +250,7 @@ const RideConfirmationScreen = () => {
             <View style={styles.rideOptionRow}>
               <View style={styles.rideOptionIconContainer}>
                 <Ionicons
-                  name={rideOption.icon}
+                  name={rideOption.icon || 'car-outline'}
                   size={24}
                   color={COLORS.primary}
                 />
@@ -108,11 +258,20 @@ const RideConfirmationScreen = () => {
               <View style={styles.rideOptionInfo}>
                 <Text style={styles.rideOptionName}>{rideOption.name}</Text>
                 <Text style={styles.rideOptionDescription}>
-                  {rideOption.description}
+                  {rideOption.description || 'Standard ride'}
                 </Text>
               </View>
               <Text style={styles.rideOptionPrice}>
-                ${rideOption.price.toFixed(2)}
+                {pickupLocation && dropoffLocation ? (
+                  `${Math.round(calculateDistance(
+                    pickupLocation.latitude,
+                    pickupLocation.longitude,
+                    dropoffLocation.latitude,
+                    dropoffLocation.longitude
+                  ) * 20)} BDT`
+                ) : (
+                  rideOption.price ? `${rideOption.price.toFixed(2)} BDT` : 'Calculating...'
+                )}
               </Text>
             </View>
             
@@ -137,13 +296,21 @@ const RideConfirmationScreen = () => {
         )}
 
         <TouchableOpacity 
-          style={[styles.confirmButton, isConfirming && styles.disabledButton]}
+          style={[
+            styles.confirmButton, 
+            (isConfirming || !isConnected) && styles.disabledButton
+          ]}
           onPress={handleConfirm}
-          disabled={isConfirming}
+          disabled={isConfirming || !isConnected}
         >
-          <Text style={styles.confirmButtonText}>
-            {isConfirming ? 'Confirming...' : 'Confirm Ride'}
-          </Text>
+          {isConfirming ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={COLORS.white} />
+              <Text style={styles.confirmButtonText}>Finding Drivers...</Text>
+            </View>
+          ) : (
+            <Text style={styles.confirmButtonText}>Confirm Ride</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -175,6 +342,19 @@ const styles = StyleSheet.create({
     ...FONTS.body3,
     color: COLORS.textSecondary,
     marginTop: 8,
+  },
+  connectionWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.errorLight,
+    padding: 10,
+    borderRadius: SIZES.radius,
+    marginBottom: 16,
+  },
+  connectionWarningText: {
+    ...FONTS.body4,
+    color: COLORS.error,
+    marginLeft: 8,
   },
   card: {
     backgroundColor: COLORS.white,
@@ -259,8 +439,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   rideOptionName: {
-    ...FONTS.h4,
+    ...FONTS.body3,
     color: COLORS.text,
+    fontWeight: '500',
   },
   rideOptionDescription: {
     ...FONTS.body4,
@@ -273,43 +454,52 @@ const styles = StyleSheet.create({
   rideDetailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
   },
   rideDetailText: {
-    ...FONTS.body4,
+    ...FONTS.body3,
     color: COLORS.text,
     marginLeft: 8,
-    width: 100,
+    flex: 1,
   },
   rideDetailValue: {
-    ...FONTS.body4,
+    ...FONTS.body3,
     color: COLORS.text,
-    flex: 1,
+    fontWeight: '500',
   },
   paymentSelector: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
   paymentText: {
-    ...FONTS.body4,
+    ...FONTS.body3,
     color: COLORS.primary,
+    fontWeight: '500',
+    marginRight: 4,
   },
   confirmButton: {
     backgroundColor: COLORS.primary,
-    borderRadius: SIZES.radius - 4,
-    padding: 16,
+    borderRadius: SIZES.radius,
+    paddingVertical: 16,
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'center',
+    marginTop: 16,
   },
   disabledButton: {
-    backgroundColor: COLORS.inactive,
+    backgroundColor: COLORS.primaryLight,
+    opacity: 0.7,
   },
   confirmButtonText: {
-    ...FONTS.body3,
+    ...FONTS.body2,
     color: COLORS.white,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 
