@@ -130,6 +130,18 @@ const LoginScreen = () => {
       }
       
       console.log('Login successful for user:', user.name);
+
+      // Map payment methods from API response format to Redux format
+      const mappedPaymentMethods = (user.paymentMethods || []).map(method => ({
+        ...method,
+        id: method._id // Map _id to id for Redux state compatibility
+      }));
+      
+      // Map saved places from API response format to Redux format
+      const mappedSavedPlaces = (user.savedPlaces || []).map(place => ({
+        ...place,
+        id: place._id // Map _id to id for Redux state compatibility
+      }));
       
       // Create the user data object to match the expected structure
       const userData = {
@@ -139,8 +151,19 @@ const LoginScreen = () => {
           email: user.email,
           phone: user.phone,
           profilePic: user.profilePic || '',
-          paymentMethods: [], // Adding these empty arrays to match required type
-          savedPlaces: [],    // Adding these empty arrays to match required type
+          homeAddress: user.homeAddress ? {
+            ...user.homeAddress,
+            id: user.homeAddress._id // Map _id to id for Redux state compatibility
+          } : undefined,
+          workAddress: user.workAddress ? {
+            ...user.workAddress,
+            id: user.workAddress._id // Map _id to id for Redux state compatibility
+          } : undefined,
+          paymentMethods: mappedPaymentMethods,
+          savedPlaces: mappedSavedPlaces,
+          isRider: user.role === 'driver' || (user.driverInfo?.isActive === true),
+          isVerified: user.isVerified,
+          rating: user.rating
         },
         token: token
       };

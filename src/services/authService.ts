@@ -11,14 +11,51 @@ export interface User {
   phone: string;
   profilePic?: string;
   role: 'user' | 'driver' | 'admin';
+  isVerified?: boolean;
   rating?: {
     average: number;
     count: number;
   };
+  homeAddress?: {
+    name: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+    isDefault: boolean;
+    _id: string;
+  };
+  workAddress?: {
+    name: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+    isDefault: boolean;
+    _id: string;
+  };
+  paymentMethods?: Array<{
+    type: string;
+    cardNumber?: string;
+    cardHolderName?: string;
+    expiryMonth?: number;
+    expiryYear?: number;
+    last4?: string;
+    brand?: string;
+    isDefault: boolean;
+    _id: string;
+  }>;
+  savedPlaces?: Array<{
+    name: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+    isDefault?: boolean;
+    _id: string;
+  }>;
   driverInfo?: {
     // Driver-specific info
     licenseNumber?: string;
     isActive?: boolean;
+    isVerified?: boolean;
     vehicleDetails?: {
       model?: string;
       make?: string;

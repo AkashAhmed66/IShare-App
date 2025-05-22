@@ -1,20 +1,27 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 interface PaymentMethod {
-  id: string;
+  id?: string;
+  _id?: string;
   type: string;
   last4?: string;
   brand?: string;
   email?: string;
   isDefault: boolean;
+  cardNumber?: string;
+  cardHolderName?: string;
+  expiryMonth?: number;
+  expiryYear?: number;
 }
 
 interface SavedPlace {
-  id: string;
+  id?: string;
+  _id?: string;
   name: string;
   address: string;
   latitude: number;
   longitude: number;
+  isDefault?: boolean;
 }
 
 interface User {
@@ -28,6 +35,7 @@ interface User {
   paymentMethods: PaymentMethod[];
   savedPlaces: SavedPlace[];
   isRider?: boolean;
+  isVerified?: boolean;
   vehicleDetails?: {
     type: string;
     make: string;
@@ -38,6 +46,10 @@ interface User {
   riderDocuments?: {
     drivingLicense: string;
     insuranceInfo: string;
+  };
+  rating?: {
+    average: number;
+    count: number;
   };
 }
 

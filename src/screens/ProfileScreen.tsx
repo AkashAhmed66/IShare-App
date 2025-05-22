@@ -143,7 +143,9 @@ const ProfileScreen = () => {
         </View>
         <View style={styles.locationInfo}>
           <Text style={styles.locationName}>Home</Text>
-          <Text style={styles.locationAddress}>{user?.homeAddress.address}</Text>
+          <Text style={styles.locationAddress}>
+            {user?.homeAddress?.address || 'No home address set'}
+          </Text>
         </View>
         <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
       </TouchableOpacity>
@@ -153,7 +155,9 @@ const ProfileScreen = () => {
         </View>
         <View style={styles.locationInfo}>
           <Text style={styles.locationName}>Work</Text>
-          <Text style={styles.locationAddress}>{user?.workAddress.address}</Text>
+          <Text style={styles.locationAddress}>
+            {user?.workAddress?.address || 'No work address set'}
+          </Text>
         </View>
         <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
       </TouchableOpacity>
