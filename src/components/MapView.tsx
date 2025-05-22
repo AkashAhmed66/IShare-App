@@ -79,13 +79,36 @@ const CustomMapView: React.FC<CustomMapViewProps> = ({
     distance: string;
     duration: string;
   } | null>(null);
+  
+  // State for source and destination markers
+  const [sourceMarker, setSourceMarker] = useState({ latitude: 23.7103, longitude: 90.4125 });
+  const [destinationMarker, setDestinationMarker] = useState({ latitude: 23.6103, longitude: 90.4125 });
+  const [userCoordinates, setUserCoordinates] = useState<{ latitude: number; longitude: number } | null>({latitude:0, longitude:0});
+  const [isDraggingSource, setIsDraggingSource] = useState(false);
+  const [isDraggingDestination, setIsDraggingDestination] = useState(false);
+  const [dragCoordinates, setDragCoordinates] = useState<{latitude: number; longitude: number} | null>(null);
 
   // Initial setup to get user location
   useEffect(() => {
+    // If initialLocation is provided, use it for the source marker
+    if (initialLocation) {
+      setSourceMarker({
+        latitude: initialLocation.latitude,
+        longitude: initialLocation.longitude
+      });
+      return;
+    }
+    
     const getLocation = async () => {
       try {
         const location = await LocationService.getCurrentLocation();
         setCurrentLocation(location);
+        
+        // Set source marker to the current location
+        setSourceMarker({
+          latitude: location.latitude,
+          longitude: location.longitude
+        });
         
         // Notify parent component if needed
         if (onSourceLocationChange && !initialLocation) {
@@ -110,7 +133,7 @@ const CustomMapView: React.FC<CustomMapViewProps> = ({
     if (!initialLocation) {
       getLocation();
     }
-  }, []);
+  }, [initialLocation]);
 
   // Track user location if needed
   useEffect(() => {
@@ -128,14 +151,14 @@ const CustomMapView: React.FC<CustomMapViewProps> = ({
 
   // Update route when source or destination changes
   useEffect(() => {
-    if (currentLocation && destination) {
-      fetchAndDrawRoute(currentLocation, destination);
+    if (sourceMarker && destinationMarker) {
+      fetchAndDrawRoute(sourceMarker, destinationMarker);
     } else {
-      // Clear route if either source or destination is missing
+      // Clear route if source or destination is missing
       setRouteCoordinates([]);
       setRouteInfo(null);
     }
-  }, [currentLocation, destination]);
+  }, [sourceMarker, destinationMarker]);
 
   // Update external coordinates if provided
   useEffect(() => {
@@ -153,6 +176,16 @@ const CustomMapView: React.FC<CustomMapViewProps> = ({
       }
     }
   }, [externalRouteCoordinates]);
+
+  // Update destination marker when destination prop changes
+  useEffect(() => {
+    if (destination) {
+      setDestinationMarker({
+        latitude: destination.latitude,
+        longitude: destination.longitude
+      });
+    }
+  }, [destination]);
 
   // Start tracking user location
   const startLocationTracking = () => {
@@ -224,7 +257,6 @@ const CustomMapView: React.FC<CustomMapViewProps> = ({
       onCustomMarkerPress(type);
     }
   };
-  const [userCoordinates, setUserCoordinates] = useState<{ latitude: number; longitude: number } | null>({latitude:0, longitude:0});
 
   useEffect(() => {
     Geolocation.requestAuthorization(
@@ -279,6 +311,81 @@ const CustomMapView: React.FC<CustomMapViewProps> = ({
 
   }, []);
 
+  // Handle source marker drag events
+  const handleSourceDragStart = () => {
+    console.log('Source marker drag started');
+    setIsDraggingSource(true);
+    setDragCoordinates(sourceMarker);
+  };
+
+  const handleSourceDrag = (e: any) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    setSourceMarker({ latitude, longitude });
+    setDragCoordinates({ latitude, longitude });
+  };
+
+  const handleSourceDragEnd = (e: any) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    console.log('Source marker drag ended at:', { latitude, longitude });
+    setSourceMarker({ latitude, longitude });
+    setIsDraggingSource(false);
+    setDragCoordinates(null);
+    
+    // Notify parent component if needed
+    if (onSourceLocationChange) {
+      onSourceLocationChange({ latitude, longitude });
+    }
+    
+    // No need to manually update route here since the useEffect will handle it
+  };
+
+  // Handle destination marker drag events
+  const handleDestinationDragStart = () => {
+    console.log('Destination marker drag started');
+    setIsDraggingDestination(true);
+    setDragCoordinates(destinationMarker);
+  };
+
+  const handleDestinationDrag = (e: any) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    setDestinationMarker({ latitude, longitude });
+    setDragCoordinates({ latitude, longitude });
+  };
+
+  const handleDestinationDragEnd = (e: any) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    console.log('Destination marker drag ended at:', { latitude, longitude });
+    setDestinationMarker({ latitude, longitude });
+    setIsDraggingDestination(false);
+    setDragCoordinates(null);
+    
+    // Notify parent component if needed
+    if (onDestinationLocationChange) {
+      onDestinationLocationChange({ latitude, longitude });
+    }
+    
+    // No need to manually update route here since the useEffect will handle it
+  };
+
+  // Define custom marker components for better visual feedback
+  const SourceMarkerCustomView = () => (
+    <View style={styles.sourceMarkerContainer}>
+      <View style={styles.sourceMarker}>
+        <Ionicons name="location" size={24} color={COLORS.primary} />
+      </View>
+      <Text style={styles.markerLabel}>Source</Text>
+    </View>
+  );
+
+  const DestinationMarkerCustomView = () => (
+    <View style={styles.destinationMarkerContainer}>
+      <View style={styles.destinationMarker}>
+        <Ionicons name="flag" size={24} color={COLORS.secondary} />
+      </View>
+      <Text style={styles.markerLabel}>Destination</Text>
+    </View>
+  );
+
   // Show loading indicator if loading
   if (isLoading) {
     return (
@@ -329,21 +436,79 @@ const CustomMapView: React.FC<CustomMapViewProps> = ({
         onRegionChange={onRegionChange}
         onPress={onMapPress}
       >
-        <Marker coordinate={{ latitude: 23.7103, longitude: 90.4125 }} 
-          title="Current Location"
-          pinColor={COLORS.primary}
-        />
-        <Marker coordinate={{ latitude: 23.6103, longitude: 90.4125 }} 
-          title="Current Location"
-          pinColor={COLORS.secondary}
-        />
+        {/* Source location marker (draggable) */}
+        <Marker 
+          coordinate={sourceMarker}
+          title="Source Location"
+          description="Drag to reposition"
+          draggable={true}
+          onDragStart={handleSourceDragStart}
+          onDrag={handleSourceDrag}
+          onDragEnd={handleSourceDragEnd}
+        >
+          <SourceMarkerCustomView />
+        </Marker>
+        
+        {/* Destination location marker (draggable) */}
+        <Marker 
+          coordinate={destinationMarker}
+          title="Destination Location"
+          description="Drag to reposition"
+          draggable={true}
+          onDragStart={handleDestinationDragStart}
+          onDrag={handleDestinationDrag}
+          onDragEnd={handleDestinationDragEnd}
+        >
+          <DestinationMarkerCustomView />
+        </Marker>
+        
+        {/* User's current location marker (not draggable) */}
         {userCoordinates && (
-          <Marker coordinate={{latitude: userCoordinates.latitude, longitude: userCoordinates.longitude}} 
+          <Marker 
+            coordinate={{latitude: userCoordinates.latitude, longitude: userCoordinates.longitude}} 
             title="Current Location"
             pinColor='orange'
           />
         )}
+        
+        {/* Draw route if coordinates are available */}
+        {routeCoordinates.length > 0 && (
+          <Polyline
+            coordinates={routeCoordinates}
+            strokeWidth={4}
+            strokeColor={COLORS.primary}
+          />
+        )}
       </MapView>
+      
+      {/* Display coordinates when dragging markers */}
+      {dragCoordinates && (isDraggingSource || isDraggingDestination) && (
+        <View style={styles.coordinatesContainer}>
+          <Text style={styles.coordinatesTitle}>
+            {isDraggingSource ? 'Source Location' : 'Destination Location'}
+          </Text>
+          <Text style={styles.coordinatesText}>
+            Latitude: {dragCoordinates.latitude.toFixed(6)}
+          </Text>
+          <Text style={styles.coordinatesText}>
+            Longitude: {dragCoordinates.longitude.toFixed(6)}
+          </Text>
+        </View>
+      )}
+      
+      {/* Display route information if available */}
+      {routeInfo && (
+        <View style={styles.routeInfoContainer}>
+          <Text style={styles.routeInfoText}>
+            Distance: {routeInfo.distance} • Duration: {routeInfo.duration}
+          </Text>
+        </View>
+      )}
+      
+      {/* Button to center on user location */}
+      <TouchableOpacity style={styles.myLocationButton} onPress={centerOnUserLocation}>
+        <Ionicons name="locate" size={24} color={COLORS.primary} />
+      </TouchableOpacity>
     </View>
   );
 };
@@ -455,6 +620,49 @@ const styles = StyleSheet.create({
     color: COLORS.black,
     fontSize: 14,
     textAlign: 'center',
+  },
+  sourceMarkerContainer: {
+    alignItems: 'center',
+  },
+  sourceMarker: {
+    backgroundColor: COLORS.white,
+    padding: 6,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  markerLabel: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginTop: 2,
+    color: COLORS.text,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    paddingHorizontal: 4,
+    borderRadius: 4,
+  },
+  coordinatesContainer: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: COLORS.white,
+    borderRadius: 5,
+    padding: 10,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  coordinatesTitle: {
+    color: COLORS.black,
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  coordinatesText: {
+    color: COLORS.black,
+    fontSize: 14,
   },
 });
 
