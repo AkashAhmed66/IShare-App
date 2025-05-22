@@ -3,6 +3,32 @@ import axios from 'axios';
 // Replace this with your actual Google Maps API key
 const GOOGLE_MAPS_API_KEY = 'AIzaSyCIYUPct8PuTHdhQMKkFPQ83Ktxhns5wFw';
 
+// Optional proxy URL to avoid CORS issues in development - you can set this to your backend proxy
+// For mobile apps, this is typically not needed since requests come directly from the device
+const PROXY_URL = ''; // Leave empty to make direct requests
+
+/**
+ * Build a URL for Google Maps API requests, optionally using a proxy
+ * @param endpoint The API endpoint path
+ * @param params The query parameters
+ * @returns The complete URL
+ */
+const buildApiUrl = (endpoint: string, params: Record<string, string>) => {
+  // Add API key to params
+  params.key = GOOGLE_MAPS_API_KEY;
+  
+  // Build query string
+  const queryString = Object.keys(params)
+    .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+    .join('&');
+  
+  // Base Google Maps API URL
+  const googleApiUrl = `https://maps.googleapis.com/maps/api/${endpoint}?${queryString}`;
+  
+  // Use proxy if specified, otherwise use direct URL
+  return PROXY_URL ? `${PROXY_URL}${encodeURIComponent(googleApiUrl)}` : googleApiUrl;
+};
+
 // Type definitions for Google Maps responses
 interface DirectionStep {
   distance: { text: string; value: number };
@@ -110,76 +136,63 @@ export const decodePolyline = (encoded: string) => {
  * @returns Array of coordinates representing the route
  */
 export const getDirections = async (
-  origin: { latitude: number; longitude: number }, 
+  origin: { latitude: number; longitude: number },
   destination: { latitude: number; longitude: number }
 ) => {
   try {
-    // For demo purposes, generate a mock route between the points
-    // In production, you would use your backend server to make the API request
+    // Prepare parameters
+    const params: Record<string, string> = {
+      origin: `${origin.latitude},${origin.longitude}`,
+      destination: `${destination.latitude},${destination.longitude}`,
+      mode: 'driving'
+    };
+    
+    // Build URL using our helper
+    const url = buildApiUrl('directions/json', params);
+    console.log('Directions API request URL:', url);
+    
+    const response = await axios.get(url);
 
-    // Calculate straight-line distance
-    const lat1 = origin.latitude;
-    const lon1 = origin.longitude;
-    const lat2 = destination.latitude;
-    const lon2 = destination.longitude;
+    // Log detailed response for debugging
+    console.log('Directions API response status:', response.data.status);
+    console.log('Directions API response error_message:', response.data.error_message);
     
-    // Haversine formula to calculate distance
-    const R = 6371; // Radius of the earth in km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    const distance = R * c; // Distance in km
-    
-    // Calculate estimated duration (assuming average speed of 30 km/h)
-    const duration = Math.round(distance / 30 * 60); // Duration in minutes
-
-    // Generate a route with some variance
-    // We'll create points along the path with slight deviations to simulate a real road
-    const numPoints = 8; // Number of points in our route
-    const coordinates = [];
-    
-    for (let i = 0; i <= numPoints; i++) {
-      // Interpolate between origin and destination
-      const fraction = i / numPoints;
-      
-      // Add a slight randomness to make it look like a real route
-      // For a more realistic route, you might use a curve algorithm
-      const variance = 0.002 * Math.sin(fraction * Math.PI); // Max 0.002 degrees ~ 200m
-      
-      const lat = origin.latitude + fraction * (destination.latitude - origin.latitude) + variance;
-      const lng = origin.longitude + fraction * (destination.longitude - origin.longitude) + variance;
-      
-      coordinates.push({
-        latitude: lat,
-        longitude: lng
+    if (response.data.status !== 'OK') {
+      console.error('Directions API error:', {
+        status: response.data.status,
+        error_message: response.data.error_message,
+        url: url,
+        apiKey: `${GOOGLE_MAPS_API_KEY.substring(0, 5)}...${GOOGLE_MAPS_API_KEY.substring(GOOGLE_MAPS_API_KEY.length - 4)}`,
+        fullResponse: JSON.stringify(response.data)
       });
+      throw new Error(`Directions API error: ${response.data.status} - ${response.data.error_message || 'No error message provided'}`);
     }
+
+    // Extract route information
+    const route = response.data.routes[0];
+    const leg = route.legs[0];
     
-    // Return the mock route data
+    // Decode the polyline to get coordinates
+    const coordinates = decodePolyline(route.overview_polyline.points);
+    
+    // Return the route data in our app's format
     return {
       coordinates,
-      distance: distance < 1 ? `${Math.round(distance * 1000)} m` : `${distance.toFixed(1)} km`,
-      duration: duration < 60 ? `${duration} min` : `${Math.floor(duration / 60)} hr ${duration % 60} min`,
-      startAddress: "Starting Point",
-      endAddress: "Destination"
+      distance: leg.distance.text,
+      duration: leg.duration.text,
+      startAddress: leg.start_address,
+      endAddress: leg.end_address
     };
-
-    /* IMPORTANT: For production, implement this properly:
-    const response = await axios.get('https://your-backend-server.com/api/directions', {
-      params: {
-        origin: `${origin.latitude},${origin.longitude}`,
-        destination: `${destination.latitude},${destination.longitude}`,
-        mode: 'driving'
-      }
-    });
-    return response.data;
-    */
   } catch (error) {
     console.error('Error fetching directions:', error);
+    if (axios.isAxiosError(error)) {
+      console.error('Axios error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message
+      });
+    }
     throw error;
   }
 };
@@ -195,64 +208,61 @@ export const searchPlaces = async (
   location?: { latitude: number; longitude: number }
 ) => {
   try {
-    // For demo purposes, if we're running on a device/emulator with limited API access,
-    // return some mock data that's dynamically generated from the query
     if (!query) return [];
-    
-    // Create mock results based on the search query for demonstration
-    // In production, you would set up a proxy server to make the API calls
-    const results = [
-      {
-        id: 'place_' + Math.random().toString(36).substring(7),
-        name: query.charAt(0).toUpperCase() + query.slice(1) + ' Plaza',
-        address: `${123 + query.length} ${query.charAt(0).toUpperCase() + query.slice(1)} Street, Anytown`,
-        coordinates: {
-          latitude: location ? location.latitude + 0.01 : 23.8103,
-          longitude: location ? location.longitude + 0.01 : 90.4125
-        },
-        types: ['point_of_interest']
-      },
-      {
-        id: 'place_' + Math.random().toString(36).substring(7),
-        name: query.charAt(0).toUpperCase() + query.slice(1) + ' Mall',
-        address: `${456 + query.length} Shopping Avenue, Anytown`,
-        coordinates: {
-          latitude: location ? location.latitude - 0.01 : 23.8203,
-          longitude: location ? location.longitude - 0.01 : 90.4225
-        },
-        types: ['shopping_mall']
-      },
-      {
-        id: 'place_' + Math.random().toString(36).substring(7),
-        name: query.charAt(0).toUpperCase() + query.slice(1) + ' Park',
-        address: `${789 + query.length} Nature Drive, Anytown`,
-        coordinates: {
-          latitude: location ? location.latitude + 0.02 : 23.8050,
-          longitude: location ? location.longitude + 0.02 : 90.4050
-        },
-        types: ['park']
-      }
-    ];
 
-    // In a real app, you would make a server-side request:
-    // 1. Send the request to your own backend server
-    // 2. Your server makes the request to Google Places API
-    // 3. Your server returns the results to the client
-
-    /* IMPORTANT: For production, implement this properly:
-    const response = await axios.get('https://your-backend-server.com/api/places', {
-      params: {
-        query,
-        lat: location?.latitude,
-        lng: location?.longitude
-      }
-    });
-    return response.data;
-    */
+    // Prepare parameters
+    const params: Record<string, string> = {
+      query: query
+    };
     
-    return results;
+    // Add location bias if provided
+    if (location) {
+      params.location = `${location.latitude},${location.longitude}`;
+      params.radius = '50000';
+    }
+    
+    // Build URL using our helper
+    const url = buildApiUrl('place/textsearch/json', params);
+    console.log('Places API request URL:', url);
+    
+    const response = await axios.get(url);
+
+    // Log detailed response for debugging
+    console.log('Places API response status:', response.data.status);
+    console.log('Places API response error_message:', response.data.error_message);
+    
+    if (response.data.status !== 'OK' && response.data.status !== 'ZERO_RESULTS') {
+      console.error('Places API error:', {
+        status: response.data.status,
+        error_message: response.data.error_message,
+        url: url,
+        apiKey: `${GOOGLE_MAPS_API_KEY.substring(0, 5)}...${GOOGLE_MAPS_API_KEY.substring(GOOGLE_MAPS_API_KEY.length - 4)}`,
+        fullResponse: JSON.stringify(response.data)
+      });
+      throw new Error(`Places API error: ${response.data.status} - ${response.data.error_message || 'No error message provided'}`);
+    }
+
+    // Format the response data to match our app's expected format
+    return response.data.results.map((place: PlacesResult) => ({
+      id: place.place_id,
+      name: place.name,
+      address: place.formatted_address,
+      coordinates: {
+        latitude: place.geometry.location.lat,
+        longitude: place.geometry.location.lng
+      },
+      types: place.types
+    }));
   } catch (error) {
     console.error('Error searching places:', error);
+    if (axios.isAxiosError(error)) {
+      console.error('Axios error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message
+      });
+    }
     throw error;
   }
 };
@@ -264,34 +274,104 @@ export const searchPlaces = async (
  */
 export const getPlaceDetails = async (placeId: string) => {
   try {
-    // For demo purposes, return mock place details
-    // In production, you would use a backend proxy server
+    // Prepare parameters
+    const params: Record<string, string> = {
+      place_id: placeId,
+      fields: 'name,formatted_address,geometry,types'
+    };
     
-    // Generate consistent details based on the placeId
-    const idNum = placeId.split('_')[1] || '123';
+    // Build URL using our helper
+    const url = buildApiUrl('place/details/json', params);
+    console.log('Place Details API request URL:', url);
+    
+    const response = await axios.get(url);
+
+    // Log detailed response for debugging
+    console.log('Place Details API response status:', response.data.status);
+    console.log('Place Details API response error_message:', response.data.error_message);
+    
+    if (response.data.status !== 'OK') {
+      console.error('Place Details API error:', {
+        status: response.data.status,
+        error_message: response.data.error_message,
+        url: url,
+        apiKey: `${GOOGLE_MAPS_API_KEY.substring(0, 5)}...${GOOGLE_MAPS_API_KEY.substring(GOOGLE_MAPS_API_KEY.length - 4)}`,
+        fullResponse: JSON.stringify(response.data)
+      });
+      throw new Error(`Place Details API error: ${response.data.status} - ${response.data.error_message || 'No error message provided'}`);
+    }
+
+    const placeDetails = response.data.result;
     
     return {
       id: placeId,
-      name: `Place ${idNum}`,
-      address: `${idNum} Main Street, Anytown`,
+      name: placeDetails.name,
+      address: placeDetails.formatted_address,
       coordinates: {
-        latitude: 23.8103 + (parseInt(idNum.substring(0, 2)) / 1000),
-        longitude: 90.4125 + (parseInt(idNum.substring(0, 2)) / 1000)
+        latitude: placeDetails.geometry.location.lat,
+        longitude: placeDetails.geometry.location.lng
       },
-      types: ['point_of_interest']
+      types: placeDetails.types
     };
-
-    /* IMPORTANT: For production, implement this properly:
-    const response = await axios.get('https://your-backend-server.com/api/place-details', {
-      params: {
-        placeId
-      }
-    });
-    return response.data;
-    */
   } catch (error) {
     console.error('Error fetching place details:', error);
+    if (axios.isAxiosError(error)) {
+      console.error('Axios error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message
+      });
+    }
     throw error;
+  }
+};
+
+/**
+ * Test the Google Maps API key to check if it's valid and has the necessary permissions
+ * @returns A promise that resolves to true if the key is valid
+ */
+export const testGoogleMapsApiKey = async () => {
+  try {
+    console.log('Testing Google Maps API key...');
+    console.log(`API Key starts with: ${GOOGLE_MAPS_API_KEY.substring(0, 5)}...`);
+    
+    // Prepare a simple test query
+    const params: Record<string, string> = {
+      query: 'test'
+    };
+    
+    // Build the test URL
+    const url = buildApiUrl('place/textsearch/json', params);
+    console.log('API Key test URL:', url);
+    
+    // Test the API key with a simple Places API request
+    const response = await axios.get(url);
+    
+    console.log('API Key test response status:', response.data.status);
+    console.log('API Key test response error_message:', response.data.error_message || 'No error message');
+    console.log('API Key test full response:', JSON.stringify(response.data));
+    
+    return {
+      valid: response.data.status === 'OK' || response.data.status === 'ZERO_RESULTS',
+      status: response.data.status,
+      error_message: response.data.error_message || 'No error message'
+    };
+  } catch (error) {
+    console.error('Error testing Google Maps API key:', error);
+    if (axios.isAxiosError(error)) {
+      console.error('Axios error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: JSON.stringify(error.response?.data),
+        message: error.message
+      });
+    }
+    return {
+      valid: false,
+      status: 'ERROR',
+      error_message: error.message
+    };
   }
 };
 
@@ -300,7 +380,8 @@ const MapsService = {
   getDirections,
   searchPlaces,
   getPlaceDetails,
-  decodePolyline
+  decodePolyline,
+  testGoogleMapsApiKey
 };
 
 export default MapsService; 

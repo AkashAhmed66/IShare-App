@@ -205,11 +205,13 @@ const HomeScreen = () => {
   };
 
   const handleOpenSearch = () => {
-    // Navigate to LocationSearchScreen instead of showing modal
+    // Navigate to LocationSearchScreen with all necessary data
     navigation.navigate('LocationSearchScreen', {
       currentLocation: sourceLocation,
       locationType: 'destination',
-      returnScreen: 'Home'
+      returnScreen: 'Home',
+      // Include the destinationLocation if it exists
+      existingDestination: destinationLocation
     });
   };
 

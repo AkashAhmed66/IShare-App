@@ -28,10 +28,51 @@ const LocationSearchScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [apiKeyStatus, setApiKeyStatus] = useState<{valid: boolean, message: string} | null>(null);
   
   // Get the current location and location type from route params
   const currentLocation = route.params?.currentLocation || { latitude: 23.8103, longitude: 90.4125 };
   const locationType = route.params?.locationType || 'destination';
+
+  // Test API key on component mount
+  useEffect(() => {
+    const testApiKey = async () => {
+      try {
+        const result = await MapsService.testGoogleMapsApiKey();
+        console.log('API key test result:', result);
+        
+        if (!result.valid) {
+          let message = `Google Maps API Key Error: ${result.status} - ${result.error_message}`;
+          
+          // Add specific guidance for REQUEST_DENIED
+          if (result.status === 'REQUEST_DENIED') {
+            message += '\n\nREQUEST_DENIED usually means your API key has restrictions or is invalid. Common causes include:';
+            message += '\n- API key restrictions (IP, referrer, or Android app)';
+            message += '\n- Missing API enabling (Places API, Directions API, etc.)';
+            message += '\n- Billing issues on your Google Cloud account';
+          }
+          
+          setApiKeyStatus({
+            valid: false,
+            message: message
+          });
+        } else {
+          setApiKeyStatus({
+            valid: true,
+            message: 'Google Maps API Key is valid'
+          });
+        }
+      } catch (error) {
+        console.error('Failed to test API key:', error);
+        setApiKeyStatus({
+          valid: false,
+          message: `Failed to test API key: ${error.message}`
+        });
+      }
+    };
+
+    testApiKey();
+  }, []);
 
   useEffect(() => {
     if (searchQuery.trim() === '') {
@@ -56,22 +97,49 @@ const LocationSearchScreen = () => {
         setSearchResults(results);
       } catch (error) {
         console.error('Error searching places:', error);
+        // If we get an API error, wait a moment before allowing more requests
+        // This helps with rate limits and network issues
+        await new Promise(resolve => setTimeout(resolve, 1000));
         // Keep the UI functional even if the API fails
         setSearchResults([]);
+        // Don't show an alert as it can be disruptive to the user experience
       } finally {
         setIsSearching(false);
       }
-    }, 500);
+    }, 500); // Debounce for 500ms
 
     return () => clearTimeout(debounceTimer);
   }, [searchQuery]);
 
+  useEffect(() => {
+    // Debug: Log search results whenever they change
+    if (searchResults.length > 0) {
+      console.log('Search results:', searchResults.length, 'items');
+      console.log('First result sample:', searchResults[0]);
+    }
+  }, [searchResults]);
+
   const handleLocationSelect = (location: any) => {
+    // Make sure we have valid coordinates before returning to the previous screen
+    if (!location.coordinates || !location.coordinates.latitude || !location.coordinates.longitude) {
+      console.error('Selected location has invalid coordinates:', location);
+      return;
+    }
+
+    console.log('Selected location with coordinates:', location);
+    
     // Return the selected location to the previous screen
     navigation.navigate({
       name: route.params?.returnScreen || 'Home',
       params: {
-        selectedLocation: location,
+        selectedLocation: {
+          ...location,
+          // Ensure coordinates are in the correct format
+          coordinates: {
+            latitude: location.coordinates.latitude,
+            longitude: location.coordinates.longitude
+          }
+        },
         locationType: locationType,
       },
       merge: true,
@@ -85,7 +153,7 @@ const LocationSearchScreen = () => {
     >
       <View style={styles.locationIconContainer}>
         <Ionicons 
-          name={item.isSaved ? 'star' : 'location-outline'} 
+          name={item.isSaved ? 'star' : (item.types && item.types.includes('point_of_interest') ? 'business-outline' : 'location-outline')} 
           size={20} 
           color={item.isSaved ? COLORS.warning : COLORS.primary} 
         />
@@ -93,6 +161,11 @@ const LocationSearchScreen = () => {
       <View style={styles.locationInfo}>
         <Text style={styles.locationName}>{item.name}</Text>
         <Text style={styles.locationAddress}>{item.address}</Text>
+        {item.coordinates && (
+          <Text style={styles.locationCoordinates}>
+            {item.coordinates.latitude.toFixed(6)}, {item.coordinates.longitude.toFixed(6)}
+          </Text>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -151,6 +224,30 @@ const LocationSearchScreen = () => {
         )}
       </View>
 
+      {/* Display API key status if there's an error */}
+      {apiKeyStatus && !apiKeyStatus.valid && (
+        <View style={styles.apiErrorContainer}>
+          <Ionicons name="alert-circle" size={24} color={COLORS.error} />
+          <View style={styles.apiErrorTextContainer}>
+            {apiKeyStatus.message.split('\n').map((line, index) => (
+              <Text 
+                key={index} 
+                style={[
+                  styles.apiErrorText, 
+                  index > 0 && styles.apiErrorHint,
+                  line.startsWith('-') && styles.apiErrorBullet
+                ]}
+              >
+                {line}
+              </Text>
+            ))}
+            <Text style={[styles.apiErrorHint, styles.apiErrorImportant]}>
+              Try regenerating your Google Maps API key and enabling the necessary APIs.
+            </Text>
+          </View>
+        </View>
+      )}
+
       {isSearching ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
@@ -163,10 +260,19 @@ const LocationSearchScreen = () => {
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              {searchQuery.trim().length < 2 ? (
-                <Text style={styles.emptyText}>Type at least 2 characters to search</Text>
+              {isSearching ? (
+                <ActivityIndicator size="large" color={COLORS.primary} />
+              ) : searchQuery.trim().length < 2 ? (
+                <View>
+                  <Ionicons name="search" size={40} color={COLORS.textSecondary} style={styles.emptyIcon} />
+                  <Text style={styles.emptyText}>Type at least 2 characters to search</Text>
+                </View>
               ) : (
-                <Text style={styles.emptyText}>No results found. Try a different search.</Text>
+                <View>
+                  <Ionicons name="location-outline" size={40} color={COLORS.textSecondary} style={styles.emptyIcon} />
+                  <Text style={styles.emptyText}>No results found</Text>
+                  <Text style={styles.emptySubtext}>Try a different search term or location</Text>
+                </View>
               )}
             </View>
           }
@@ -241,6 +347,11 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 4,
   },
+  locationCoordinates: {
+    ...FONTS.body4,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -253,6 +364,46 @@ const styles = StyleSheet.create({
   emptyText: {
     ...FONTS.body3,
     color: COLORS.textSecondary,
+  },
+  emptyIcon: {
+    marginBottom: 10,
+  },
+  emptySubtext: {
+    ...FONTS.body4,
+    color: COLORS.textSecondary,
+  },
+  apiErrorContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 16,
+    margin: 16,
+    backgroundColor: COLORS.errorLight || '#FFEBEE',
+    borderWidth: 1,
+    borderColor: COLORS.error,
+    borderRadius: SIZES.radius - 4,
+  },
+  apiErrorTextContainer: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  apiErrorText: {
+    ...FONTS.body3,
+    color: COLORS.error,
+    marginBottom: 10,
+  },
+  apiErrorHint: {
+    ...FONTS.body4,
+    color: COLORS.textSecondary,
+  },
+  apiErrorBullet: {
+    ...FONTS.body4,
+    color: COLORS.textSecondary,
+    marginLeft: 20,
+  },
+  apiErrorImportant: {
+    ...FONTS.body3,
+    color: COLORS.error,
+    fontWeight: 'bold',
   },
 });
 
