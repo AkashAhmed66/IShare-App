@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Replace this with your actual Google Maps API key
-const GOOGLE_MAPS_API_KEY = 'AIzaSyCIYUPct8PuTHdhQMKkFPQ83Ktxhns5wFw';
+const GOOGLE_MAPS_API_KEY = 'AlzaSyM2UhGcgh7zeSvJiTtYIEnq4ACUZd4b52R';
 
 // Optional proxy URL to avoid CORS issues in development - you can set this to your backend proxy
 // For mobile apps, this is typically not needed since requests come directly from the device
@@ -23,7 +23,7 @@ const buildApiUrl = (endpoint: string, params: Record<string, string>) => {
     .join('&');
   
   // Base Google Maps API URL
-  const googleApiUrl = `https://maps.googleapis.com/maps/api/${endpoint}?${queryString}`;
+  const googleApiUrl = `https://maps.gomaps.pro/maps/api/${endpoint}?${queryString}`;
   
   // Use proxy if specified, otherwise use direct URL
   return PROXY_URL ? `${PROXY_URL}${encodeURIComponent(googleApiUrl)}` : googleApiUrl;
