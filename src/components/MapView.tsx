@@ -224,6 +224,7 @@ const CustomMapView: React.FC<CustomMapViewProps> = ({
       onCustomMarkerPress(type);
     }
   };
+  const [userCoordinates, setUserCoordinates] = useState<{ latitude: number; longitude: number } | null>({latitude:0, longitude:0});
 
   useEffect(() => {
     Geolocation.requestAuthorization(
@@ -234,6 +235,48 @@ const CustomMapView: React.FC<CustomMapViewProps> = ({
         console.log('Authorization error:', error);
       }
     );
+    Geolocation.getCurrentPosition(
+      (position) => {
+        setUserCoordinates({latitude: position.coords.latitude, longitude:position.coords.longitude});
+        console.log('Current position:', position.coords);
+      },
+      (error) => {
+        console.log('Error getting current position:', error);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    );
+
+    const watchId = Geolocation.watchPosition(
+      (position) => {
+        const newCoordinates = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        };
+        // setUserCoordinates(newCoordinates);
+        
+        // If trackUserLocation is enabled, update the map
+        if (trackUserLocation && mapRef.current) {
+          mapRef.current.animateToRegion({
+            latitude: newCoordinates.latitude,
+            longitude: newCoordinates.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          });
+        }
+      },
+      (error) => {
+        console.log('Error watching position:', error);
+      },
+      {
+        enableHighAccuracy: true,
+        distanceFilter: 0, // Update every 10 meters
+        interval: 2000, // Update every 5 seconds
+        useSignificantChanges: false,
+        maximumAge: 0,
+        fastestInterval: 2000 // Fastest rate in milliseconds
+      }
+    );
+
   }, []);
 
   // Show loading indicator if loading
@@ -266,7 +309,6 @@ const CustomMapView: React.FC<CustomMapViewProps> = ({
       </View>
     );
   }
-
   return (
     <View style={[styles.container, style]}>
       <MapView
@@ -295,6 +337,12 @@ const CustomMapView: React.FC<CustomMapViewProps> = ({
           title="Current Location"
           pinColor={COLORS.secondary}
         />
+        {userCoordinates && (
+          <Marker coordinate={{latitude: userCoordinates.latitude, longitude: userCoordinates.longitude}} 
+            title="Current Location"
+            pinColor='orange'
+          />
+        )}
       </MapView>
     </View>
   );
