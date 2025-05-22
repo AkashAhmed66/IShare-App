@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,88 +6,122 @@ import {
   FlatList,
   TouchableOpacity,
   SafeAreaView,
+  RefreshControl,
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useDispatch } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { COLORS, FONTS, SIZES, SHADOWS } from '../styles/theme';
 import EmptyState from '../components/EmptyState';
-
-// Mock notifications data
-const mockNotifications = [
-  {
-    id: '1',
-    title: 'Ride Completed',
-    message: 'Your ride to Central Mall has been completed. Rate your experience!',
-    time: '2023-10-15T14:45:00',
-    read: false,
-    type: 'ride',
-  },
-  {
-    id: '2',
-    title: 'Payment Processed',
-    message: 'Your payment of $15.75 has been processed successfully.',
-    time: '2023-10-15T14:40:00',
-    read: false,
-    type: 'payment',
-  },
-  {
-    id: '3',
-    title: 'Ride Scheduled',
-    message: 'Your ride to Conference Center has been scheduled for tomorrow at 10:00 AM.',
-    time: '2023-10-14T18:30:00',
-    read: true,
-    type: 'ride',
-  },
-  {
-    id: '4',
-    title: 'Discount Offer',
-    message: 'Get 20% off on your next 3 rides! Use code SHARE20.',
-    time: '2023-10-12T10:15:00',
-    read: true,
-    type: 'promo',
-  },
-  {
-    id: '5',
-    title: 'New Feature',
-    message: 'You can now schedule rides up to 7 days in advance!',
-    time: '2023-10-10T09:00:00',
-    read: true,
-    type: 'system',
-  },
-];
+import { RootState } from '../redux/store';
+import { notificationService, Notification } from '../services/notificationService';
+import { socketService } from '../services/socketService';
+import { 
+  fetchNotificationsStart, 
+  fetchNotificationsFailure, 
+  fetchNotificationsSuccess,
+  markAllAsRead as markAllReadAction 
+} from '../redux/slices/notificationSlice';
 
 const NotificationsScreen = () => {
   const navigation = useNavigation<any>();
   const dispatch = useDispatch();
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const { notifications, unreadCount, isLoading, error } = useSelector(
+    (state: RootState) => state.notification
+  );
+  
+  const [refreshing, setRefreshing] = useState(false);
 
+  // Load notifications when screen mounts
   useEffect(() => {
-    // In a real app, would dispatch an action to mark all notifications as read
-    // dispatch(markAllNotificationsAsRead());
+    loadNotifications();
   }, []);
 
-  const handleNotificationPress = (notification: any) => {
-    // Mark notification as read
-    const updatedNotifications = notifications.map(item => 
-      item.id === notification.id ? { ...item, read: true } : item
-    );
-    setNotifications(updatedNotifications);
+  // Mark all as read when screen is focused
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      handleMarkAllAsRead();
+    });
+    return unsubscribe;
+  }, [navigation]);
 
-    // Navigate based on notification type
-    if (notification.type === 'ride') {
-      navigation.navigate('RideHistory');
-    } else if (notification.type === 'payment') {
-      navigation.navigate('Payment');
-    } else if (notification.type === 'promo') {
-      navigation.navigate('HomeScreen');
+  // Function to load notifications from the server
+  const loadNotifications = async () => {
+    dispatch(fetchNotificationsStart());
+    try {
+      const fetchedNotifications = await notificationService.getNotifications();
+      dispatch(fetchNotificationsSuccess(fetchedNotifications));
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      dispatch(fetchNotificationsFailure(error.message || 'Failed to load notifications'));
     }
   };
 
-  const clearNotifications = () => {
-    setNotifications([]);
-    // In a real app, would dispatch an action to clear notifications
-    // dispatch(clearAllNotifications());
+  // Pull to refresh handler
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadNotifications();
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Handle notification press
+  const handleNotificationPress = async (notification: Notification) => {
+    try {
+      // Mark as read in backend
+      await notificationService.markAsRead(notification.id);
+      
+      // Navigate to appropriate screen based on notification type
+      notificationService.navigateToNotificationDestination(navigation, notification);
+    } catch (error) {
+      console.error('Error handling notification press:', error);
+    }
+  };
+
+  // Mark all notifications as read
+  const handleMarkAllAsRead = async () => {
+    try {
+      await notificationService.markAllAsRead();
+      dispatch(markAllReadAction());
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
+  };
+
+  // Clear all notifications
+  const clearNotifications = async () => {
+    try {
+      Alert.alert(
+        'Clear All Notifications',
+        'Are you sure you want to clear all notifications? This cannot be undone.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Clear All', 
+            style: 'destructive',
+            onPress: async () => {
+              await notificationService.clearAllNotifications();
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error clearing notifications:', error);
+    }
+  };
+
+  // Simulate a test notification (for debugging)
+  const simulateNotification = () => {
+    socketService.simulateNotification(
+      'ride', 
+      'Test Notification',
+      'This is a test notification from the app.',
+      { testData: true }
+    );
   };
 
   const formatTimeAgo = (dateString: string) => {
@@ -120,19 +154,20 @@ const NotificationsScreen = () => {
         return 'card-outline';
       case 'promo':
         return 'gift-outline';
+      case 'driver_update':
+        return 'navigate-outline';
       case 'system':
-        return 'information-circle-outline';
       default:
         return 'notifications-outline';
     }
   };
 
-  const renderNotificationItem = ({ item }: { item: any }) => (
+  const renderNotificationItem = ({ item }: { item: Notification }) => (
     <TouchableOpacity 
       style={[styles.notificationItem, item.read ? styles.readNotification : styles.unreadNotification]}
       onPress={() => handleNotificationPress(item)}
     >
-      <View style={[styles.iconContainer, styles[`${item.type}IconContainer`]]}>
+      <View style={[styles.iconContainer, styles[`${item.type}IconContainer` as keyof typeof styles] || styles.systemIconContainer]}>
         <Ionicons 
           name={getNotificationIcon(item.type)} 
           size={20} 
@@ -145,7 +180,7 @@ const NotificationsScreen = () => {
           <Text style={styles.notificationTime}>{formatTimeAgo(item.time)}</Text>
         </View>
         <Text style={styles.notificationMessage} numberOfLines={2}>
-          {item.message}
+          {item.body}
         </Text>
       </View>
       {!item.read && <View style={styles.unreadDot} />}
@@ -155,11 +190,20 @@ const NotificationsScreen = () => {
   const renderEmptyState = () => (
     <EmptyState
       icon="notifications"
-      message="You don't have any notifications yet"
-      actionText="Refresh"
-      onAction={() => setNotifications(mockNotifications)}
+      message={error ? `Error: ${error}` : "You don't have any notifications yet"}
+      actionText={error ? "Try Again" : "Test Notification"}
+      onAction={error ? loadNotifications : simulateNotification}
     />
   );
+
+  if (isLoading && !refreshing && notifications.length === 0) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading notifications...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -170,6 +214,13 @@ const NotificationsScreen = () => {
             renderItem={renderNotificationItem}
             keyExtractor={item => item.id}
             contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[COLORS.primary]}
+              />
+            }
           />
 
           <TouchableOpacity style={styles.clearButton} onPress={clearNotifications}>
@@ -187,6 +238,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+  },
+  loadingText: {
+    ...FONTS.body3,
+    color: COLORS.textSecondary,
+    marginTop: 12,
   },
   listContent: {
     padding: 16,
@@ -223,6 +285,9 @@ const styles = StyleSheet.create({
   },
   promoIconContainer: {
     backgroundColor: COLORS.warning,
+  },
+  driver_updateIconContainer: {
+    backgroundColor: COLORS.info,
   },
   systemIconContainer: {
     backgroundColor: COLORS.textSecondary,

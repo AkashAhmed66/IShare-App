@@ -63,6 +63,15 @@ export const API_ENDPOINTS = {
   MARK_AS_READ: (messageId: string) => `/api/messages/${messageId}/read`,
   UNREAD_COUNT: '/api/messages/unread',
   
+  // Notifications
+  GET_NOTIFICATIONS: '/api/notifications',
+  MARK_NOTIFICATION_READ: (id: string) => `/api/notifications/${id}/read`,
+  MARK_ALL_NOTIFICATIONS_READ: '/api/notifications/read-all',
+  DELETE_NOTIFICATION: (id: string) => `/api/notifications/${id}`,
+  CLEAR_NOTIFICATIONS: '/api/notifications',
+  NOTIFICATION_UNREAD_COUNT: '/api/notifications/unread/count',
+  REGISTER_DEVICE_TOKEN: '/api/notifications/device-token',
+  
   // Payments
   PAYMENT_INTENT: '/api/payments/create-intent',
   PAYMENT_METHODS: '/api/payments/methods',

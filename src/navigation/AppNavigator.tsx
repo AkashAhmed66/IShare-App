@@ -11,6 +11,8 @@ import { useEffect, useState } from 'react';
 import { authService } from '../services/authService';
 import { loginSuccess } from '../redux/slices/authSlice';
 import * as Storage from '../utils/asyncStorageUtils';
+import { socketService } from '../services/socketService';
+import { notificationService } from '../services/notificationService';
 
 // Screens
 import HomeScreen from '../screens/HomeScreen';
@@ -407,6 +409,16 @@ const AppNavigator = () => {
             
             // Dispatch login success to update Redux state
             dispatch(loginSuccess(userData));
+            
+            // Initialize socket connection with user ID and fetch notifications
+            socketService.initialize(user._id);
+            
+            // Attempt to load saved notifications
+            try {
+              await notificationService.getNotifications();
+            } catch (error) {
+              console.log('Could not load notifications:', error);
+            }
           }
         }
       } catch (error) {

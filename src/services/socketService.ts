@@ -5,9 +5,11 @@ import {
   receiveHighDemandUpdate,
   receivePromoNotification,
   setSocketConnected,
+  addNotification
 } from '../redux/slices/notificationSlice';
 import { updateDriverLocation } from '../redux/slices/mapSlice';
 import { SOCKET_URL } from '../config/apiConfig';
+import { Notification } from './notificationService';
 
 class SocketService {
   private socket: Socket | null = null;
@@ -116,6 +118,66 @@ class SocketService {
       store.dispatch(receivePromoNotification(data));
     });
     
+    // Generic notification handler for all types of notifications
+    this.socket.on('notification', (notification: Notification) => {
+      console.log('[Socket] Notification received:', notification);
+      store.dispatch(addNotification(notification));
+    });
+    
+    // New ride request notification (for drivers)
+    this.socket.on('ride_request', (data) => {
+      console.log('[Socket] Ride request notification received:', data);
+      
+      const notification: Notification = {
+        id: `ride-request-${Date.now()}`,
+        title: 'New Ride Request',
+        body: `New ride request from ${data.pickupLocation} to ${data.destination}`,
+        time: new Date().toISOString(),
+        read: false,
+        type: 'ride',
+        relatedId: data.rideId,
+        data: data
+      };
+      
+      store.dispatch(addNotification(notification));
+    });
+    
+    // Ride status update notification
+    this.socket.on('ride_status_update', (data) => {
+      console.log('[Socket] Ride status update notification received:', data);
+      
+      const notification: Notification = {
+        id: `ride-status-${Date.now()}`,
+        title: 'Ride Status Update',
+        body: `Your ride status has changed to: ${data.status}`,
+        time: new Date().toISOString(),
+        read: false,
+        type: 'ride',
+        relatedId: data.rideId,
+        data: data
+      };
+      
+      store.dispatch(addNotification(notification));
+    });
+    
+    // Payment notification
+    this.socket.on('payment_processed', (data) => {
+      console.log('[Socket] Payment processed notification received:', data);
+      
+      const notification: Notification = {
+        id: `payment-${Date.now()}`,
+        title: 'Payment Processed',
+        body: `Your payment of $${data.amount} has been processed successfully.`,
+        time: new Date().toISOString(),
+        read: false,
+        type: 'payment',
+        relatedId: data.paymentId,
+        data: data
+      };
+      
+      store.dispatch(addNotification(notification));
+    });
+    
     // Error handling
     this.socket.on('error', (error) => {
       console.error('[Socket] Error:', error);
@@ -184,6 +246,21 @@ class SocketService {
   // Simulate promo notification
   simulatePromoNotification(promoData: any): void {
     store.dispatch(receivePromoNotification(promoData));
+  }
+  
+  // Simulate a generic notification
+  simulateNotification(type: string, title: string, body: string, data: any = null): void {
+    const notification: Notification = {
+      id: `simulated-${Date.now()}`,
+      title: title,
+      body: body,
+      time: new Date().toISOString(),
+      read: false,
+      type: type as any,
+      data: data
+    };
+    
+    store.dispatch(addNotification(notification));
   }
 }
 

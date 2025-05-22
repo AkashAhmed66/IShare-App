@@ -190,12 +190,19 @@ class AuthService {
         }
       }
     } finally {
+      // Clear socket connection
+      try {
+        import('./socketService').then(({ socketService }) => {
+          socketService.disconnect();
+          console.log('[Auth] Socket disconnected');
+        });
+      } catch (e) {
+        console.warn('[Auth] Could not disconnect socket:', e);
+      }
+      
       // Clear local storage and state
       await this.clearSession();
       console.log('[Auth] Local session cleared');
-      
-      // Disconnect socket
-      socketService.disconnect();
     }
   }
 
